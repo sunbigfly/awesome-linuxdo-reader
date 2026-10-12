@@ -259,63 +259,39 @@
 	border-radius: var(--ldp-jump-highlight-radius, 10px);
 }
 
-/*
- * 完整讨论的嵌套楼层默认为直角树节点。定位闪烁改由独立视觉层承载，
- * 复用主阅读流的圆角与动画，并在头像左侧留出一小段呼吸空间，不改树布局。
- */
-.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"]) {
+.ldp-post.ldp-jump-highlight {
 	isolation: isolate;
-	border-radius: var(--ldp-jump-highlight-radius, 10px);
 	animation: none;
 }
 
-.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"])::before {
-	content: "";
-	position: absolute;
-	z-index: -1;
-	inset: 0 0 0 -8px;
-	border-radius: var(--ldp-jump-highlight-radius, 10px);
-	pointer-events: none;
-	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
-		ease-in-out var(--ldp-jump-highlight-count, 2);
-}
-
-.ldp-jump-highlight:not(.ldp-post[data-post-number="1"]) {
-	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
-		ease-in-out var(--ldp-jump-highlight-count, 2);
-}
-
-.ldp-virtual-root-list > .ldp-post.ldp-zebra-alt.ldp-jump-highlight:not([data-post-number="1"]) {
-	animation: none;
-}
-
-.ldp-virtual-root-list > .ldp-post.ldp-zebra-alt.ldp-jump-highlight:not([data-post-number="1"])::before {
-	content: "";
-	position: absolute;
-	z-index: -1;
-	inset: 6px 0;
-	border-radius: inherit;
-	pointer-events: none;
-	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
-		ease-in-out var(--ldp-jump-highlight-count, 2);
-}
-
-.ldp-post[data-post-number="1"].ldp-jump-highlight {
-	isolation: isolate;
-}
-
-.ldp-post[data-post-number="1"].ldp-jump-highlight::before {
+/* 视觉层只覆盖本楼层的头部与正文，子回复保持各自的背景。 */
+.ldp-post.ldp-jump-highlight::before {
 	content: "";
 	position: absolute;
 	z-index: -1;
 	left: 0;
 	right: 0;
 	top: 0;
-	height: var(--ldp-first-post-jump-highlight-height, 100%);
+	height: var(--ldp-post-jump-highlight-height, 100%);
 	border-radius: var(--ldp-jump-highlight-radius, 10px);
 	pointer-events: none;
 	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
 		ease-in-out var(--ldp-jump-highlight-count, 2);
+}
+
+.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight::before {
+	left: -8px;
+}
+
+.ldp-jump-highlight:not(.ldp-post) {
+	animation: ldp-jump-pulse var(--ldp-jump-highlight-duration, 1250ms)
+		ease-in-out var(--ldp-jump-highlight-count, 2);
+}
+
+.ldp-virtual-root-list > .ldp-post.ldp-zebra-alt.ldp-jump-highlight:not([data-post-number="1"])::before {
+	top: 6px;
+	height: max(0px, calc(var(--ldp-post-jump-highlight-height, 100%) - 12px));
+	border-radius: inherit;
 }
 
 @keyframes ldp-jump-pulse {
@@ -428,7 +404,7 @@
 		);
 		box-shadow: inset 0 0 0 1px var(--ldp-warning, #d97706);
 	}
-	.ldp-jump-highlight:not(.ldp-post[data-post-number="1"]) {
+	.ldp-jump-highlight:not(.ldp-post) {
 		animation: none;
 		background: color-mix(
 			in srgb,
@@ -438,26 +414,7 @@
 		box-shadow: inset 0 0 0 var(--ldp-jump-highlight-border-width, 1px)
 			var(--ldp-jump-highlight-color, #0888cc);
 	}
-	.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"]) {
-		background: transparent;
-		box-shadow: none;
-	}
-	.ldp-descendant-replies-tree .ldp-post.ldp-jump-highlight:not([data-post-number="1"])::before {
-		animation: none;
-		background: color-mix(
-			in srgb,
-			var(--ldp-jump-highlight-color, #0888cc) 34%,
-			transparent
-		);
-		box-shadow: inset 0 0 0 var(--ldp-jump-highlight-border-width, 1px)
-			var(--ldp-jump-highlight-color, #0888cc);
-	}
-	.ldp-virtual-root-list > .ldp-post.ldp-zebra-alt.ldp-jump-highlight:not([data-post-number="1"]) {
-		background: transparent;
-		box-shadow: none;
-	}
-	.ldp-virtual-root-list > .ldp-post.ldp-zebra-alt.ldp-jump-highlight:not([data-post-number="1"])::before,
-	.ldp-post[data-post-number="1"].ldp-jump-highlight::before {
+	.ldp-post.ldp-jump-highlight::before {
 		animation: none;
 		background: color-mix(
 			in srgb,

@@ -12,6 +12,7 @@ export interface ReaderReplyTreePreferences {
 	readonly aggregateDescendantReplies: boolean;
 	readonly inlineReplyTreeMaxDepth: number;
 	readonly hideNestedReplyFloors: boolean;
+	readonly showHiddenReplyAvatarsByDefault: boolean;
 }
 
 export type ReaderReplyTreeSettingName = keyof ReaderReplyTreePreferences;
@@ -36,6 +37,7 @@ export interface ReaderReplyTreePreferencesPreviewPort {
 }
 
 export interface ReaderReplyTreePresentationTopology {
+	readonly showHiddenReplyAvatarsByDefault?: boolean;
 	readonly postFilterKey: string | null;
 	readonly coverageComplete: boolean;
 	postFilterMatches(postNumber: PostNumber): boolean;
@@ -81,6 +83,7 @@ export const DEFAULT_READER_REPLY_TREE_PREFERENCES =
 	aggregateDescendantReplies: true,
 	inlineReplyTreeMaxDepth: 3,
 	hideNestedReplyFloors: true,
+	showHiddenReplyAvatarsByDefault: true,
 });
 
 export function normalizeReaderReplyTreePreferences(
@@ -102,13 +105,15 @@ export function normalizeReaderReplyTreePreferences(
 			? Math.min(5, Math.max(1, Math.trunc(rawDepth)))
 			: DEFAULT_READER_REPLY_TREE_PREFERENCES.inlineReplyTreeMaxDepth,
 		hideNestedReplyFloors: value.hideNestedReplyFloors === true,
+		showHiddenReplyAvatarsByDefault:
+			value.showHiddenReplyAvatarsByDefault !== false,
 	});
 }
 
 /**
  * 已持久化回复树偏好与设置草稿之间的唯一运行态投影源。
  *
- * canonical 关系仍只由 ReplyTreeTopology 拥有；本对象只保存五个显示偏好的规范化快照。
+ * canonical 关系仍只由 ReplyTreeTopology 拥有；本对象只保存显示偏好的规范化快照。
  * 设置表单可即时预览，保存或放弃时再用持久化值覆盖同一快照。
  */
 export class ReaderReplyTreePreferencesPreview
@@ -229,6 +234,10 @@ implements ReaderReplyTreePresentationTopology {
 		return this.#preferences;
 	}
 
+	get showHiddenReplyAvatarsByDefault(): boolean {
+		return this.#preferences.showHiddenReplyAvatarsByDefault;
+	}
+
 	get revision(): string {
 		return `${this.#activeCanonicalRevision()}:` +
 			`${Number(this.#activeCanonicalCoverageComplete())}:` +
@@ -295,12 +304,18 @@ implements ReaderReplyTreePresentationTopology {
 			Object.keys(next) as ReaderReplyTreeSettingName[]
 		).some((name) => !Object.is(next[name], this.#preferences[name]));
 		if (changed) {
+			const projectionChanged = (
+				Object.keys(next) as ReaderReplyTreeSettingName[]
+			).some((name) => name !== 'showHiddenReplyAvatarsByDefault' &&
+				!Object.is(next[name], this.#preferences[name]));
 			this.#preferences = next;
-			this.#revealedFloors.clear();
-			this.#revealedParents.clear();
-			this.#degradedFloorRoots.clear();
-			this.#degradedFloorCanonicalRevision = -1;
-			this.#projectionRevision += 1;
+			if (projectionChanged) {
+				this.#revealedFloors.clear();
+				this.#revealedParents.clear();
+				this.#degradedFloorRoots.clear();
+				this.#degradedFloorCanonicalRevision = -1;
+				this.#projectionRevision += 1;
+			}
 		}
 		return changed;
 	}

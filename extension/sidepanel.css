@@ -1,0 +1,81 @@
+@import url("vendor/katex.min.css");
+
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #222;
+  background: #fff;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; min-width: 320px; background: #fff; }
+
+.panel-shell { min-height: 100vh; }
+
+.panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+}
+
+.panel-title { margin: 0; font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+.panel-meta { margin-top: 4px; color: #767676; font-size: 12px; }
+
+.panel-actions { display: flex; gap: 6px; align-items: flex-start; }
+.panel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.panel-button:hover { background: #f4f4f4; }
+
+.panel-content { padding: 12px 14px 28px; }
+.panel-load-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 9px 10px;
+  border: 1px solid #e6d8ab;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #765d1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.panel-load-notice .panel-button { flex: 0 0 auto; background: #fff; }
+.panel-post { padding: 0 0 18px; border-bottom: 1px solid #ececec; }
+.panel-post + .panel-post { padding-top: 18px; }
+.panel-post-head { display: flex; align-items: baseline; gap: 7px; margin-bottom: 9px; }
+.panel-author { color: #222; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.panel-date { color: #777; font-size: 11px; }
+.panel-number { margin-left: auto; color: #47855f; font-size: 12px; text-decoration: none; }
+.panel-cooked { color: #333; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.panel-cooked > :first-child { margin-top: 0; }
+.panel-cooked > :last-child { margin-bottom: 0; }
+.panel-cooked img { max-width: 100%; height: auto; border-radius: 6px; }
+.panel-cooked pre { overflow: auto; padding: 10px; border-radius: 7px; background: #f5f5f5; }
+.panel-cooked blockquote { margin-inline: 0; padding-left: 10px; border-left: 3px solid #d9eadf; color: #5c6f62; }
+.panel-cooked a { color: #47855f; }
+
+.panel-empty { display: grid; min-height: 180px; place-items: center; padding: 24px; color: #777; text-align: center; line-height: 1.6; }
+.panel-error { color: #b33; }

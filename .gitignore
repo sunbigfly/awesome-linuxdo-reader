@@ -25,6 +25,18 @@
 !/.github/workflows/*.yml
 
 !/AGENTS.md
+!/manifest.json
+
+!/extension/
+/extension/*
+!/extension/background.js
+!/extension/lite-userscript-compat.js
+!/extension/sidepanel.css
+!/extension/sidepanel.html
+!/extension/sidepanel.js
+!/extension/vendor/
+/extension/vendor/*
+!/extension/vendor/katex.min.css
 
 !/.agents/
 /.agents/*
@@ -75,6 +87,7 @@
 !/scripts/test-main-lite.mjs
 !/scripts/test-main-lite-greasyfork.mjs
 !/scripts/test-mian-lite.mjs
+!/scripts/test-extension-site-access.mjs
 !/scripts/verify-main-lite-local-parity.mjs
 
 !/lite/

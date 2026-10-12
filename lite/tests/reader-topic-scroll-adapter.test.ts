@@ -1,6 +1,7 @@
 import { parseHTML } from 'linkedom';
 import {
 	ReaderBoostTargetHighlightController,
+	ReaderTopicJumpHighlightController,
 	ReaderTopicScrollAdapter,
 } from '../src/topic/reader-topic-scroll-adapter.js';
 
@@ -653,7 +654,7 @@ adapter.alignPost(first, {
 assert(
 	!second.classList.contains('ldp-jump-highlight') &&
 	first.classList.contains('ldp-jump-highlight') &&
-	first.style.getPropertyValue('--ldp-first-post-jump-highlight-height') ===
+	first.style.getPropertyValue('--ldp-post-jump-highlight-height') ===
 		'150px' &&
 	Number(firstBodyRectReads) === 0 &&
 	observed.has(first) &&
@@ -665,7 +666,7 @@ observerCallback.value?.([]);
 scheduled.value?.callback();
 assert(
 	!first.classList.contains('ldp-jump-highlight') &&
-	!first.style.getPropertyValue('--ldp-first-post-jump-highlight-height') &&
+	!first.style.getPropertyValue('--ldp-post-jump-highlight-height') &&
 	observerDisconnects >= 1,
 	'高亮到期必须释放 class、首楼变量与 ResizeObserver',
 );
@@ -673,13 +674,69 @@ reactionsRect = rect(0, 0);
 adapter.highlightPost(first);
 assert(
 	first.classList.contains('ldp-jump-highlight') &&
-	first.style.getPropertyValue('--ldp-first-post-jump-highlight-height') ===
+	first.style.getPropertyValue('--ldp-post-jump-highlight-height') ===
 		'230px' &&
 	Number(firstBodyRectReads) === 1 &&
 	observed.has(firstBody),
 	'主帖操作列隐藏回应区时，#1 闪烁必须退回正文边界，不能生成零高视觉层或覆盖后续回复',
 );
 scheduled.value?.callback();
+
+const branchPost = document.createElement('article');
+branchPost.className = 'ldp-post';
+branchPost.dataset.postNumber = '8';
+const ownBody = document.createElement('div');
+ownBody.className = 'ldp-post-body';
+const descendants = document.createElement('section');
+descendants.className = 'ldp-reply-tree';
+descendants.innerHTML = '<article class="ldp-post"><div class="ldp-post-body"></div></article>';
+branchPost.append(ownBody, descendants);
+scrollRoot.append(branchPost);
+let ownBodyRect = rect(330, 70);
+Object.defineProperty(branchPost, 'getBoundingClientRect', { value: () => rect(300, 4_800) });
+Object.defineProperty(ownBody, 'getBoundingClientRect', { value: () => ownBodyRect });
+assert(
+	adapter.alignmentError(branchPost, { source: 'timeline', alignment: 'center' }) === 30,
+	'存在巨大子回复树时，居中误差必须按本楼层自身的 100px 内容计算',
+);
+const ownResize = { value: null as (() => void) | null };
+const ownObserved = new Set<Element>();
+let ownDisconnects = 0;
+const ownHighlight = new ReaderTopicJumpHighlightController({
+	createResizeObserver(callback) {
+		ownResize.value = () => callback([]);
+		return {
+			observe: (target) => { ownObserved.add(target); },
+			disconnect: () => { ownDisconnects += 1; },
+		};
+	},
+	schedule: () => 1,
+	cancel: () => {},
+});
+ownHighlight.highlight(branchPost);
+assert(
+	branchPost.style.getPropertyValue('--ldp-post-jump-highlight-height') === '100px' &&
+		ownObserved.has(ownBody) && !ownObserved.has(descendants),
+	'普通楼层闪烁必须覆盖自身头部和正文，排除全部子对话，并监听自身正文尺寸',
+);
+ownBodyRect = rect(330, 170);
+ownResize.value?.();
+assert(
+	branchPost.style.getPropertyValue('--ldp-post-jump-highlight-height') === '200px',
+	'正文媒体改变高度后，闪烁边界必须随正文更新而不扩展到子树底部',
+);
+ownBodyRect = rect(330, 900);
+assert(
+	adapter.alignmentError(branchPost, { source: 'timeline', alignment: 'center' }) === 160,
+	'目标自身含长图时必须将楼层起始位置对齐可见顶部，不能居中到长图内部',
+);
+ownHighlight.destroy();
+assert(
+	!branchPost.classList.contains('ldp-jump-highlight') &&
+		!branchPost.style.getPropertyValue('--ldp-post-jump-highlight-height') && ownDisconnects === 1,
+	'正文区域高亮销毁时必须清理视觉变量与尺寸观察器',
+);
+branchPost.remove();
 
 const boostBubble = document.createElement('span');
 boostBubble.className = 'ldp-boost-bubble';

@@ -1,10 +1,10 @@
 ---
 title: 性能与请求调度
-description: 调整正文与直属回复预取、DOM 窗口、宿主 Topic 预热、已读 RPM/TPM 和共享安全边界。
+description: 配置可选浏览器 DoH 联网方案，调整正文与直属回复预取、DOM 窗口、宿主 Topic 预热、已读 RPM/TPM 和共享安全边界。
 feature_ids: ["READ-001", "READ-002", "SET-012", "SET-013", "SET-014", "SET-015", "SET-023", "MONITOR-003"]
 source_anchors: ["lite/src/settings/reader-performance-settings-form.ts","lite/src/app/reader-performance-policy.ts","lite/src/topic/topic-session.ts","lite/src/topic/reader-topic-flow-controller.ts","lite/src/cache/topic-snapshot-handoff.ts","lite/src/cache/response-repository.ts","lite/src/network/browser-shared-request-permit.ts","lite/src/network/reader-host-turnstile-background-controller.ts","lite/src/network/request-contract.ts","lite/src/network/reader-request-flow-config.ts","lite/src/network/reader-business-request-config.ts","lite/src/network/reader-business-request-policy.ts","lite/src/network/request-scheduler.ts","lite/src/network/domain-request-gateway.ts"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
 last_verified: 2026-08-21
 screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
@@ -13,6 +13,23 @@ screenshots: ["/screenshots/guide-11-request-flow-v1.5.0.png"]
 # 性能与请求调度
 
 路径：**阅读器标题栏 → 设置 → 性能设置**。
+
+## 浏览器 DoH 配置
+
+“浏览器 DoH 配置”以紧凑卡片提供 **一摩尔氚 DoH（普通版）** 的预置地址 `https://edge.1molchuan.top/linuxdo`，地址可以直接复制；点击“查看配置步骤”后显示 Chrome / Chromium、Microsoft Edge 或 Firefox 的设置指引。服务信息见[原帖](https://linux.do/t/2946664)。
+
+1. 在配置卡片复制 DoH 地址，并展开“查看配置步骤”。
+2. 选择正在使用的浏览器，将“浏览器设置地址”粘贴到地址栏打开。
+3. 在浏览器的安全 DNS / 基于 HTTPS 的 DNS 中启用自定义提供商，填入 DoH 地址并保存。
+4. 刷新论坛后继续阅读。
+
+这里的卡片提供配置指引，**完成浏览器配置后才生效**，并作用于整个浏览器的联网；展开步骤不代表 DoH 已启用。浏览器负责 DNS 和 TLS / ECH，阅读器继续通过原站会话与既有请求管线联网。浏览器配置独立于阅读器设置保存、恢复默认、导入导出和 WebDAV `preferences`，这些操作不会改写浏览器的 DNS。
+
+如果 Chrome 提示“受管理，已停用”，先检查 `chrome://policy` 中的浏览器策略；个人电脑上的本地策略也可能触发这个状态。Chrome 在受管理环境中未显式配置 `DnsOverHttpsMode` 时默认不发送 DoH 查询，但管理员可以通过 `DnsOverHttpsMode` 和 `DnsOverHttpsTemplates` 明确配置。阅读器不能修改这些策略，也不能直接接管 DNS / ECH。参见 [Chrome 管理状态说明](https://support.google.com/chrome/answer/9281740?hl=zh-Hans)和 [DoH 模式策略](https://chromeenterprise.google/intl/en_ca/policies/dns-over-https-mode/)。
+
+DoH / ECH 是连接辅助方案，实际 ECH 支持由浏览器和服务端决定，无法保证减少 CF 盾或免除站点验证。Cloudflare 挑战受站点安全规则影响；出现验证时仍应在原站完成验证。参见 [Chrome 安全 DNS 配置](https://support.google.com/chrome/answer/10468685?co=GENIE.Platform%3DDesktop&hl=zh-Hans)、[Firefox ECH 说明](https://support.mozilla.org/en-US/kb/faq-encrypted-client-hello)和 [Cloudflare 挑战说明](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/)。
+
+## 请求调度
 
 性能设置按当前 Discourse API 管线分成八层；全局、请求流与业务数值提供可编辑目标上限，profile、缓存和重试仍是固定安全规则：
 

@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const docsRoot = path.join(root, 'docs')
 const liteMetadataPath = path.join(root, 'lite/userscript.meta.txt')
 const liteSourceRoot = path.join(root, 'lite/src')
+const extensionManifestPath = path.join(root, 'manifest.json')
+const extensionSourceRoot = path.join(root, 'extension')
 const packagePath = path.join(root, 'package.json')
 const packageLockPath = path.join(root, 'package-lock.json')
 const catalogPath = path.join(docsRoot, 'public/feature-catalog.json')
@@ -111,19 +113,29 @@ function assetExists(reference, pageFile) {
 
 if (!fs.existsSync(liteMetadataPath)) errors.push('lite/userscript.meta.txt: 元数据不存在')
 if (!fs.existsSync(liteSourceRoot)) errors.push('lite/src: 业务源码目录不存在')
+if (!fs.existsSync(extensionManifestPath)) errors.push('manifest.json: 扩展清单不存在')
+if (!fs.existsSync(extensionSourceRoot)) errors.push('extension: 扩展源码目录不存在')
 if (!fs.existsSync(catalogPath)) errors.push('docs/public/feature-catalog.json: 功能目录不存在')
 
 const liteMetadata = fs.existsSync(liteMetadataPath)
   ? fs.readFileSync(liteMetadataPath, 'utf8')
   : ''
 const liteSourceFiles = walk(liteSourceRoot, (file) => file.endsWith('.ts')).sort()
+const extensionSourceFiles = [
+  extensionManifestPath,
+  ...walk(extensionSourceRoot, (file) => file.endsWith('.js')),
+].filter(fs.existsSync).sort()
 const source = [
-  path.relative(root, liteMetadataPath).split(path.sep).join('/'),
-  liteMetadata,
+	path.relative(root, liteMetadataPath).split(path.sep).join('/'),
+	liteMetadata,
   ...liteSourceFiles.flatMap((file) => [
-    path.relative(root, file).split(path.sep).join('/'),
-    fs.readFileSync(file, 'utf8'),
-  ]),
+		path.relative(root, file).split(path.sep).join('/'),
+		fs.readFileSync(file, 'utf8'),
+	]),
+	...extensionSourceFiles.flatMap((file) => [
+		path.relative(root, file).split(path.sep).join('/'),
+		fs.readFileSync(file, 'utf8'),
+	]),
 ].join('\n')
 const version = sourceVersion(source)
 

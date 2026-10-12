@@ -91,6 +91,7 @@ let preferences = createReaderPreferencesDefaults({
 const changes = new Signal<Readonly<ReaderPreferences>>();
 let updates = 0;
 const treePreviews: number[] = [];
+const avatarPreviews: boolean[] = [];
 const controller = new ReaderSettingsController<ReaderPreferences>({
 	preferences: {
 		read: () => preferences,
@@ -116,6 +117,7 @@ const form = new ReaderInteractionSettingsForm({
 	replyTreePreview: {
 		update(value) {
 			treePreviews.push(value.inlineReplyTreeMaxDepth ?? 1);
+			avatarPreviews.push(value.showHiddenReplyAvatarsByDefault !== false);
 			return true;
 		},
 	},
@@ -346,6 +348,25 @@ assert(
 	),
 	'操作列设置必须与 Boost 规则复用一次 Settings/application 写事务',
 );
+
+const hiddenAvatarSetting = host.querySelector<HTMLInputElement>(
+	'.ldp-show-hidden-reply-avatars-default',
+)!;
+assert(hiddenAvatarSetting.checked, '隐藏楼层头像常显设置必须可见且默认开启');
+hiddenAvatarSetting.checked = false;
+hiddenAvatarSetting.dispatchEvent(new parsedWindow.Event('change', { bubbles: true }));
+assert(
+	avatarPreviews.at(-1) === false && preferences.showHiddenReplyAvatarsByDefault &&
+		Number(controller.snapshot.draftCount) === 1,
+	'关闭头像常显必须进入统一草稿，并立即向当前帖预览投影提交',
+);
+controller.saveAll();
+assert(!preferences.showHiddenReplyAvatarsByDefault, '头像常显关闭必须随统一事务持久化');
+hiddenAvatarSetting.checked = true;
+hiddenAvatarSetting.dispatchEvent(new parsedWindow.Event('change', { bubbles: true }));
+controller.discardAll();
+assert(!hiddenAvatarSetting.checked && avatarPreviews.at(-1) === false,
+	'放弃头像草稿必须恢复已持久化值和当前帖预览');
 
 form.destroy();
 controller.destroy();

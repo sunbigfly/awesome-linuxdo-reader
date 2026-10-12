@@ -48,9 +48,23 @@ const form = new ReaderPerformanceSettingsForm({
 	preferenceChanges,
 });
 
+const networkGuide = host.querySelector<HTMLButtonElement>('[data-network-toggle]')!;
+networkGuide.click();
+assert(
+	!host.querySelector<HTMLElement>('[data-network-guide]')!.hidden &&
+		Number(updateCount) === 0 && controller.snapshot.draftCount === 0,
+	'性能面板应接入 DoH 卡片；展开指引不能伪装为已保存的浏览器 DNS',
+);
+controller.setQuery('DoH');
+assert(
+	controller.snapshot.visiblePanelIds.includes('performance'),
+	'设置搜索应能通过 DoH 找到联网配置指引',
+);
+controller.setQuery('');
+
 assert(
 	host.querySelectorAll('.ldp-performance-preset').length === 0 &&
-		host.querySelectorAll('.ldp-settings-category-group').length === 8 &&
+		host.querySelectorAll('.ldp-settings-category-group').length === 9 &&
 		host.querySelectorAll('[data-performance-key]').length === 9 &&
 		host.querySelectorAll('[data-request-flow-key]').length === 12 &&
 		host.querySelector<HTMLInputElement>(

@@ -9,6 +9,7 @@ import {
 } from '../dom/event-target.js';
 import { bindFloatingSurfaceWheel } from '../dom/floating-surface-wheel.js';
 import { htmlElement as element } from '../dom/html-element.js';
+import { readPostViewOwnRegion } from '../dom/post-view-region.js';
 import type {
 	PostView,
 	PostViewIdentity,
@@ -21,6 +22,7 @@ import type { ReplyTreeRepository } from '../dom/reply-tree-repository.js';
 import type { PostNumber } from '../dom/reply-tree.js';
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import type { Signal } from '../kernel/signal.js';
+import type { ReadStateController } from '../reading/read-state-controller.js';
 import { renderReaderIcon } from '../components/reader-icon.js';
 import { ReaderBranchOverlayController } from '../layout/branch-overlay.js';
 import {
@@ -61,6 +63,15 @@ import {
 	type ReaderTopicContextStateStoragePort,
 } from './reader-topic-context-state.js';
 import type { DiscourseTopicPostInput } from './topic-session.js';
+import {
+	bindReaderReplyAvatarInteractions,
+	READER_REPLY_AVATAR_LIMIT,
+	type ReaderReplyAvatarPort,
+} from './reader-reply-avatar-interactions.js';
+import {
+	ReaderReplyAvatarSurface,
+	type ReaderReplyAvatarSurfacePort,
+} from './reader-reply-avatar-surface.js';
 
 interface ReaderTopicContextWorkspaceSnapshot {
 	readonly presentation: Readonly<{
@@ -132,9 +143,11 @@ export interface ReaderTopicContextFeatureOptions<
 		| 'childrenOf'
 		| 'hiddenDirectChildrenOf'
 		| 'hiddenFloorRunAfter'
+		| 'showHiddenReplyAvatarsByDefault'
 		| 'rootOf'
 	>;
 	readonly avatarSource?: (template: string, size: number) => string;
+	readonly readState?: Pick<ReadStateController, 'changes' | 'isConfirmed'>;
 	readonly scrollRoot: HTMLElement;
 	readonly navigate: () => ReaderTopicContextNavigationPort | null;
 	readonly target?: ReaderTopicContextTargetPort;
@@ -210,7 +223,6 @@ function button(
 	return value;
 }
 
-const HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE = 100;
 const QUOTE_HINT_POINTER_GAP_PX = 4;
 const QUOTE_HINT_HIDE_GRACE_MS = 480;
 
@@ -387,8 +399,12 @@ export class ReaderTopicContextFeature<
 	readonly #rootCleanups = new WeakMap<HTMLElement, Cleanup>();
 	readonly #viewByRoot = new WeakMap<HTMLElement, PostView>();
 	readonly #hiddenReplyMarkers = new Map<HTMLElement, HTMLElement>();
+	readonly #hiddenReplyMarkerScopes = new WeakMap<HTMLElement, LifecycleScope>();
 	readonly #hiddenReplyPostNumbers =
 		new WeakMap<HTMLElement, readonly PostNumber[]>();
+	readonly #replyAvatars = new Map<number, Set<HTMLElement>>();
+	readonly #openedReplyPostNumbers = new Set<number>();
+	readonly #readState: ReaderTopicContextFeatureOptions<TPost>['readState'];
 	readonly #rootsByPostNumber =
 		new Map<DiscoursePostNumber, Set<HTMLElement>>();
 	readonly #collapsedRootReplies = new Set<DiscoursePostNumber>();
@@ -396,6 +412,7 @@ export class ReaderTopicContextFeature<
 	readonly #quotePostLoads = new Map<string, Promise<TPost | null>>();
 	readonly #expandedQuoteKeys = new Set<string>();
 	#quoteSourcePort: ReaderTopicQuoteSourcePort | null = null;
+	#replyAvatarSurface: ReaderReplyAvatarSurfacePort | null = null;
 	#quoteHighlight: ReaderHistoryQuoteHighlightState | null = null;
 	#quoteHighlightMarks: readonly HTMLElement[] = Object.freeze([]);
 	#quoteHighlightHint: HTMLElement | null = null;
@@ -414,6 +431,7 @@ export class ReaderTopicContextFeature<
 		this.#navigate = options.navigate;
 		this.#target = options.target;
 		this.#avatarSource = options.avatarSource;
+		this.#readState = options.readState;
 		this.#renderIcon = options.renderIcon;
 		this.#onQuoteBodyChanged = options.onQuoteBodyChanged;
 		this.#onRevealNextReplyLevel = options.onRevealNextReplyLevel;
@@ -440,6 +458,22 @@ export class ReaderTopicContextFeature<
 			for (const roots of this.#rootsByPostNumber.values()) {
 				for (const root of roots) this.#syncMountedTree(root);
 			}
+			for (const postNumber of this.#replyAvatars.keys()) this.#syncAvatarReadState(postNumber);
+		}, this.scope);
+		options.readState?.changes.subscribe((change) => {
+			if (change.kind !== 'confirmed') return;
+			for (const postNumber of change.postNumbers) this.#syncAvatarReadState(postNumber);
+		}, this.scope);
+		options.controller.changes.subscribe((snapshot) => {
+			const discussion = snapshot.discussion;
+			const target = discussion?.targetPostNumber;
+			if (
+				target == null || this.#openedReplyPostNumbers.has(target) ||
+				!discussion?.entries.some((entry) => entry.postNumber === target)
+			) return;
+			// 成功进入目标楼层后立即更新本地提示；阅读上报仍由统一 read owner 处理。
+			this.#openedReplyPostNumbers.add(target);
+			this.#syncAvatarReadState(target);
 		}, this.scope);
 		this.scope.add(() => {
 			this.#quoteJumpEpoch += 1;
@@ -452,6 +486,8 @@ export class ReaderTopicContextFeature<
 			this.#collapsedRootReplies.clear();
 			this.#quotePostLoads.clear();
 			this.#expandedQuoteKeys.clear();
+			this.#replyAvatars.clear();
+			this.#openedReplyPostNumbers.clear();
 			this.#clearQuoteHighlight();
 		});
 	}
@@ -575,6 +611,99 @@ export class ReaderTopicContextFeature<
 			true,
 		);
 		return candidate.postNumber;
+	}
+
+	connectReplyAvatarSurface(port: ReaderReplyAvatarSurfacePort): Cleanup {
+		if (this.#replyAvatarSurface && this.#replyAvatarSurface !== port) {
+			throw new Error('楼层头像浮窗只能连接一个 owner');
+		}
+		this.#replyAvatarSurface = port;
+		return this.scope.add(() => {
+			if (this.#replyAvatarSurface === port) this.#replyAvatarSurface = null;
+		});
+	}
+
+	createReplyAvatar(postNumber: number): HTMLButtonElement {
+		const post = this.#controller.postByNumber(postNumber);
+		const identity = post as TPost & Readonly<{
+			name?: unknown;
+			username?: unknown;
+			avatar_template?: unknown;
+		}> | undefined;
+		const username = String(identity?.username ?? '').trim();
+		const displayName = String(identity?.name ?? '').trim() || username || `#${postNumber}`;
+		const avatar = button(
+			this.#document,
+			'ldp-hidden-reply-avatar',
+			`在完整讨论中查看 ${displayName} 的回复 #${postNumber}`,
+		);
+		avatar.dataset.readerContextHiddenPost = String(postNumber);
+		avatar.dataset.readerReplyAvatarName = displayName;
+		// 发言气泡接管悬停，保留 aria-label 并排除通用文字 tooltip。
+		avatar.dataset.tooltip = '';
+		avatar.setAttribute('aria-haspopup', 'dialog');
+		const avatars = this.#replyAvatars.get(postNumber) ?? new Set<HTMLElement>();
+		avatars.add(avatar);
+		this.#replyAvatars.set(postNumber, avatars);
+		const source = this.#avatarSource?.(String(identity?.avatar_template ?? ''), 32) ?? '';
+		if (source) {
+			const image = this.#document.createElement('img');
+			image.src = source;
+			image.alt = '';
+			image.loading = 'lazy';
+			image.decoding = 'async';
+			avatar.append(image);
+		} else {
+			avatar.textContent = [...displayName][0] ?? '?';
+		}
+		const readMark = element(this.#document, 'span', 'ldp-reply-avatar-read-mark');
+		readMark.setAttribute('aria-hidden', 'true');
+		readMark.append(renderReaderIcon(this.#document, 'check'));
+		avatar.append(readMark);
+		this.#syncAvatarReadState(postNumber);
+		return avatar;
+	}
+
+	releaseReplyAvatar(avatar: HTMLElement): void {
+		const postNumber = Number(avatar.dataset.readerContextHiddenPost);
+		const avatars = this.#replyAvatars.get(postNumber);
+		avatars?.delete(avatar);
+		if (avatars?.size === 0) this.#replyAvatars.delete(postNumber);
+	}
+
+	#syncAvatarReadState(postNumber: number): void {
+		const avatars = this.#replyAvatars.get(postNumber);
+		if (!avatars) return;
+		const post = this.#controller.postByNumber(postNumber) as TPost & Readonly<{ read?: unknown }> | undefined;
+		const state = this.#openedReplyPostNumbers.has(postNumber) ||
+			post?.read === true || this.#readState?.isConfirmed(postNumber)
+			? 'read'
+			: post?.read === false ? 'unread' : 'unknown';
+		const label = state === 'read' ? '已读' : state === 'unread' ? '未读' : '已读状态未知';
+		for (const avatar of avatars) {
+			if (avatar.dataset.readState === state) continue;
+			avatar.dataset.readState = state;
+			const readMark = avatar.querySelector<HTMLElement>('.ldp-reply-avatar-read-mark');
+			if (readMark) readMark.hidden = state !== 'read';
+			avatar.setAttribute('aria-label', `在完整讨论中查看 ${avatar.dataset.readerReplyAvatarName} 的回复 #${postNumber}，${label}`);
+		}
+	}
+
+	previewReplyAvatar(postNumber: number, anchor: HTMLElement): void {
+		this.#replyAvatarSurface?.preview(postNumber, anchor, this.#quoteHintHost);
+	}
+
+	async openReplyDiscussion(postNumber: number): Promise<void> {
+		this.#replyAvatarSurface?.dismissPreview();
+		await this.#controller.openDiscussion(discoursePostNumber(postNumber));
+	}
+
+	showReplyAvatarOverflow(postNumbers: readonly number[], anchor: HTMLElement): void {
+		this.#replyAvatarSurface?.overflow(postNumbers, anchor, this.#quoteHintHost);
+	}
+
+	dismissReplyAvatarSurfaces(container: HTMLElement): void {
+		this.#replyAvatarSurface?.dismissFor(container);
 	}
 
 	connectQuoteSource(port: ReaderTopicQuoteSourcePort): Cleanup {
@@ -887,7 +1016,7 @@ export class ReaderTopicContextFeature<
 			currentFloor.replaceWith(floor);
 		}
 		const insideDiscussion = Boolean(
-			root.closest('.ldp-descendant-replies-layer'),
+			root.closest('.ldp-descendant-replies-layer,.ldp-hidden-reply-preview'),
 		);
 		const hiddenDirectChildren = insideDiscussion
 			? Object.freeze([])
@@ -969,7 +1098,7 @@ export class ReaderTopicContextFeature<
 		const streamReply =
 			canonicalReply &&
 			!this.#isOnlyOpPost(postNumber) &&
-			!root.closest('.ldp-descendant-replies-layer') &&
+			!root.closest('.ldp-descendant-replies-layer,.ldp-hidden-reply-preview') &&
 			(projectedParent === null || nestedPreview);
 		const collapseControlVisible =
 			streamReply && projectedParent === null && !nestedPreview;
@@ -1151,7 +1280,7 @@ export class ReaderTopicContextFeature<
 				postNumber,
 				post,
 			);
-			if (postRoot.closest('.ldp-descendant-replies-layer')) continue;
+			if (postRoot.closest('.ldp-descendant-replies-layer,.ldp-hidden-reply-preview')) continue;
 			this.#syncHiddenReplyMarker(postRoot, postNumber);
 		}
 	}
@@ -1180,17 +1309,19 @@ export class ReaderTopicContextFeature<
 			this.#removeHiddenReplyMarker(root);
 			return;
 		}
+		const defaultExpanded = this.#presentation?.showHiddenReplyAvatarsByDefault !== false;
 		if (
 			previous &&
-			this.#hiddenReplyPostNumbers.get(previous) === hiddenPostNumbers
+			this.#hiddenReplyPostNumbers.get(previous) === hiddenPostNumbers &&
+			previous.dataset.readerContextHiddenDefaultExpanded === String(defaultExpanded)
 		) {
 			root.classList.add('ldp-before-hidden-reply-marker');
 			if (previous.previousElementSibling !== root) root.after(previous);
 			return;
 		}
-		const expanded = previous?.querySelector<HTMLElement>(
-			'[data-reader-context-hidden-list]',
-		)?.hidden === false;
+		const expanded = previous?.dataset.readerContextHiddenDefaultExpanded === String(defaultExpanded)
+			? previous.querySelector<HTMLElement>('[data-reader-context-hidden-list]')?.hidden === false
+			: defaultExpanded;
 		this.#removeHiddenReplyMarker(root);
 		const marker = element(
 			this.#document,
@@ -1198,6 +1329,9 @@ export class ReaderTopicContextFeature<
 			'ldp-hidden-reply-marker',
 		);
 		marker.dataset.readerContextHiddenReplies = '1';
+		marker.setAttribute('role', 'group');
+		marker.setAttribute('aria-label', `${hiddenPostNumbers.length} 个隐藏楼层`);
+		marker.dataset.readerContextHiddenDefaultExpanded = String(defaultExpanded);
 		marker.dataset.readerContextHiddenPostNumbers = [
 			hiddenPostNumbers.length,
 			hiddenPostNumbers[0],
@@ -1207,7 +1341,7 @@ export class ReaderTopicContextFeature<
 		const toggle = button(
 			this.#document,
 			'ldp-btn ldp-hidden-reply-toggle',
-			`${expanded ? '收起' : '查看'} ${hiddenPostNumbers.length} 个隐藏回复`,
+			`${expanded ? '收起' : '查看'} ${hiddenPostNumbers.length} 个隐藏楼层头像`,
 		);
 		toggle.dataset.readerContextHiddenToggle = '1';
 		toggle.setAttribute('aria-expanded', String(expanded));
@@ -1221,10 +1355,15 @@ export class ReaderTopicContextFeature<
 		list.setAttribute('role', 'list');
 		list.hidden = !expanded;
 		if (expanded) this.#appendHiddenReplyBatch(marker, list);
-		marker.append(toggle, list);
+		const label = element(this.#document, 'span', 'ldp-hidden-reply-label');
+		label.textContent = `隐藏 ${hiddenPostNumbers.length}`;
+		marker.append(list, label, toggle);
 		this.#hiddenReplyMarkers.set(root, marker);
 		root.classList.add('ldp-before-hidden-reply-marker');
-		marker.addEventListener('click', (event) => {
+		const markerScope = this.scope.child();
+		this.#hiddenReplyMarkerScopes.set(marker, markerScope);
+		markerScope.add(bindReaderReplyAvatarInteractions(marker, this, markerScope, this.#onError));
+		markerScope.listen(marker, 'click', (event) => {
 			void this.#handleClick(event, root, postNumber).catch((error) => {
 				if (!this.scope.destroyed && marker.isConnected) {
 					this.#onError(error);
@@ -1244,71 +1383,33 @@ export class ReaderTopicContextFeature<
 	): void {
 		list.querySelector('[data-reader-context-hidden-more]')?.remove();
 		const postNumbers = this.#hiddenReplyPostNumbers.get(marker) ?? [];
-		const rendered = Math.min(
-			postNumbers.length,
-			Math.max(
-				0,
-				Number(list.dataset.readerContextHiddenRendered) || 0,
-			),
-		);
-		const end = Math.min(
-			postNumbers.length,
-			rendered + HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE,
-		);
-		for (let index = rendered; index < end; index += 1) {
+		const strip = element(this.#document, 'div', 'ldp-hidden-reply-avatar-strip');
+		list.append(strip);
+		const end = Math.min(postNumbers.length, READER_REPLY_AVATAR_LIMIT);
+		for (let index = 0; index < end; index += 1) {
 			const hiddenPostNumber = postNumbers[index]!;
-			const post = this.#controller.postByNumber(hiddenPostNumber);
-			const identity = post as TPost & Readonly<{
-				name?: unknown;
-				username?: unknown;
-				avatar_template?: unknown;
-			}> | undefined;
-			const username = String(identity?.username ?? '').trim();
-			const displayName = String(identity?.name ?? '').trim() ||
-				username || `#${hiddenPostNumber}`;
-			const avatar = button(
-				this.#document,
-				'ldp-hidden-reply-avatar',
-				`跳到 ${displayName} 的回复 #${hiddenPostNumber}`,
-			);
-			avatar.dataset.readerContextHiddenPost = String(hiddenPostNumber);
+			const avatar = this.createReplyAvatar(hiddenPostNumber);
 			avatar.setAttribute('role', 'listitem');
-			const source = this.#avatarSource?.(
-				String(identity?.avatar_template ?? ''),
-				24,
-			) ?? '';
-			if (source) {
-				const image = this.#document.createElement('img');
-				image.src = source;
-				image.alt = '';
-				image.loading = 'lazy';
-				image.decoding = 'async';
-				avatar.append(image);
-			} else {
-				avatar.textContent = [...displayName][0] ?? '?';
-			}
-			list.append(avatar);
+			strip.append(avatar);
 		}
 		list.dataset.readerContextHiddenRendered = String(end);
 		if (end >= postNumbers.length) return;
 		const remaining = postNumbers.length - end;
-		const nextBatchSize = Math.min(
-			remaining,
-			HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE,
-		);
 		const more = button(
 			this.#document,
 			'ldp-btn ldp-hidden-reply-more',
-			`再显示 ${nextBatchSize} 个隐藏回复，剩余 ${remaining} 个`,
-			`+${nextBatchSize}`,
+			`查看其余 ${remaining} 个隐藏楼层头像`,
+			`+${remaining}`,
 		);
 		more.dataset.readerContextHiddenMore = '1';
 		more.setAttribute('role', 'listitem');
+		more.setAttribute('aria-haspopup', 'dialog');
 		list.append(more);
 	}
 
 	#removeHiddenReplyMarker(root: HTMLElement): void {
 		const marker = this.#hiddenReplyMarkers.get(root);
+		if (marker) this.#hiddenReplyMarkerScopes.get(marker)?.destroy();
 		marker?.remove();
 		this.#hiddenReplyMarkers.delete(root);
 		root.classList.remove('ldp-before-hidden-reply-marker');
@@ -1356,12 +1457,13 @@ export class ReaderTopicContextFeature<
 				this.#appendHiddenReplyBatch(hiddenMarker, list);
 			}
 			list.hidden = !expanded;
+			if (!expanded) this.dismissReplyAvatarSurfaces(hiddenMarker);
 			hiddenToggle.setAttribute('aria-expanded', String(expanded));
 			const hiddenPostCount =
 				this.#hiddenReplyPostNumbers.get(hiddenMarker)?.length ?? 0;
 			hiddenToggle.setAttribute(
 				'aria-label',
-				`${expanded ? '收起' : '查看'} ${hiddenPostCount} 个隐藏回复`,
+				`${expanded ? '收起' : '查看'} ${hiddenPostCount} 个隐藏楼层头像`,
 			);
 			return;
 		}
@@ -1373,7 +1475,11 @@ export class ReaderTopicContextFeature<
 			const list = hiddenMore.closest<HTMLElement>(
 				'[data-reader-context-hidden-list]',
 			);
-			if (list) this.#appendHiddenReplyBatch(hiddenMarker, list);
+			const rendered = Number(list?.dataset.readerContextHiddenRendered) || 0;
+			this.showReplyAvatarOverflow(
+				(this.#hiddenReplyPostNumbers.get(hiddenMarker) ?? []).slice(rendered),
+				hiddenMore,
+			);
 			return;
 		}
 		const hiddenReply = target.closest<HTMLElement>(
@@ -1381,16 +1487,9 @@ export class ReaderTopicContextFeature<
 		);
 		if (hiddenReply && hiddenMarker?.contains(hiddenReply)) {
 			event.preventDefault();
-			const navigation = this.#navigate();
-			if (!navigation) throw new Error('隐藏楼层跳转时 navigation 尚未就绪');
-			await navigation.navigate({
-				postNumber: discoursePostNumber(
-					hiddenReply.dataset.readerContextHiddenPost,
-				),
-				source: 'timeline',
-				alignment: 'nearest',
-				highlight: true,
-			});
+			await this.#controller.openDiscussion(
+				discoursePostNumber(hiddenReply.dataset.readerContextHiddenPost),
+			);
 			return;
 		}
 		const selfButton = target.closest<HTMLElement>(
@@ -1398,6 +1497,10 @@ export class ReaderTopicContextFeature<
 		);
 		if (selfButton && root.contains(selfButton)) {
 			event.preventDefault();
+			if (root.closest('.ldp-hidden-reply-preview')) {
+				await this.openReplyDiscussion(Number(selfButton.dataset.targetPostNumber));
+				return;
+			}
 			const navigation = this.#navigate();
 			if (!navigation) throw new Error('楼层跳转时 navigation 尚未就绪');
 			await navigation.navigate({
@@ -2010,13 +2113,6 @@ class ReaderTopicDiscussionTopology<
 	}
 }
 
-interface ReaderTopicDiscussionPan {
-	readonly pointerId: number;
-	readonly startX: number;
-	readonly scrollLeft: number;
-	moved: boolean;
-}
-
 /**
  * 完整讨论的单一 DOM surface。
  *
@@ -2075,23 +2171,14 @@ export class ReaderTopicContextSurface<
 	#discussionBranchFrame = 0;
 	#discussionContentWidth = 0;
 	#observesDiscussionSize = false;
-	#treePan: ReaderTopicDiscussionPan | null = null;
-	#suppressTreeClick = false;
 	#lastWorkspaceFullPage: boolean;
 
 	get discussionContentHost(): HTMLElement {
 		return this.#discussionLayer;
 	}
 
-	scrollDiscussionHorizontal(delta: number): boolean {
-		if (
-			this.scope.destroyed ||
-			this.#discussionLayer.hidden ||
-			!Number.isFinite(delta) ||
-			delta === 0
-		) return false;
-		this.#discussionList.scrollLeft += delta;
-		return true;
+	scrollDiscussionHorizontal(_delta: number): boolean {
+		return false;
 	}
 
 	constructor(options: ReaderTopicContextSurfaceOptions<TPost>) {
@@ -2265,6 +2352,25 @@ export class ReaderTopicContextSurface<
 			),
 		}));
 		const viewport = readViewport();
+		const contextFeature = options.postFeatures?.find(
+			(feature): feature is ReaderTopicContextFeature<TPost> =>
+				feature instanceof ReaderTopicContextFeature,
+		);
+		let avatarSurface: ReaderReplyAvatarSurface<TPost> | null = null;
+		if (contextFeature) {
+			avatarSurface = new ReaderReplyAvatarSurface({
+				document: options.document,
+				controller: this.#controller,
+				projector: this.#postProjector,
+				avatars: contextFeature satisfies ReaderReplyAvatarPort,
+				readViewport,
+				requestFrame: this.#requestFrame,
+				cancelFrame: this.#cancelFrame,
+				parentScope: this.scope,
+				onError: this.#onError,
+			});
+			this.scope.add(contextFeature.connectReplyAvatarSurface(avatarSurface));
+		}
 		const viewportTarget = options.viewportTarget ?? defaultView;
 		this.discussionGeometry = new ReaderWindowGeometryModel({
 			preferences: {
@@ -2340,22 +2446,6 @@ export class ReaderTopicContextSurface<
 				return;
 			}
 		});
-		this.scope.listen(this.#discussionList, 'pointerdown', (event) => {
-			this.#onTreePanPointerDown(event as PointerEvent);
-		});
-		this.scope.listen(this.#discussionList, 'pointermove', (event) => {
-			this.#onTreePanPointerMove(event as PointerEvent);
-		});
-		for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-			this.scope.listen(this.#discussionList, type, (event) => {
-				this.#stopTreePan(event as PointerEvent);
-			});
-		}
-		this.scope.listen(this.#discussionList, 'click', (event) => {
-			if (!this.#suppressTreeClick) return;
-			event.preventDefault();
-			event.stopImmediatePropagation();
-		}, true);
 		const NativeResizeObserver = defaultView?.ResizeObserver;
 		const createResizeObserver = options.createResizeObserver ??
 			(NativeResizeObserver
@@ -2391,8 +2481,13 @@ export class ReaderTopicContextSurface<
 				this.handleEscape(event as KeyboardEvent);
 			}, true);
 		}
+		let discussionWasOpen = this.#controller.snapshot().discussion !== null;
 		this.#controller.changes.subscribe((snapshot) => {
+			const discussionClosed = discussionWasOpen && snapshot.discussion === null;
+			discussionWasOpen = snapshot.discussion !== null;
 			this.#project(snapshot);
+			// 投影关闭会恢复头像焦点；在恢复完成后清理，避免 focusin 重开预览。
+			if (discussionClosed) avatarSurface?.dismissPreview();
 		}, this.scope);
 		this.#workspace.changes.subscribe((snapshot) => {
 			const fullPage = snapshot.presentation.fullPage;
@@ -2426,7 +2521,6 @@ export class ReaderTopicContextSurface<
 				this.#cancelFrame(this.#discussionBranchFrame);
 				this.#discussionBranchFrame = 0;
 			}
-			this.#stopTreePan();
 			for (const postNumber of this.#mountedDiscussionPostNumbers) {
 				const root = this.discussionDomOwner.view(postNumber)?.slots.root;
 				if (root) this.#detachDiscussionFeatures(root, postNumber);
@@ -2720,8 +2814,17 @@ export class ReaderTopicContextSurface<
 			const target = this.discussionDomOwner.view(targetPostNumber)
 				?.slots.root;
 			if (target?.isConnected) {
+				const region = readPostViewOwnRegion(target).rect;
+				const viewport = this.#discussionList.getBoundingClientRect();
+				const availableHeight = Math.max(0, viewport.height - 24);
+				const offset = region.height <= availableHeight
+					? 12 + (availableHeight - region.height) / 2
+					: 12;
+				this.#discussionList.scrollTop = Math.max(
+					0,
+					this.#discussionList.scrollTop + region.top - viewport.top - offset,
+				);
 				this.#highlight(target);
-				target.scrollIntoView?.({ block: 'center', inline: 'nearest' });
 				this.#requestFrame(() => {
 					if (!this.scope.destroyed) {
 						this.#controller.clearDiscussionTarget();
@@ -3022,7 +3125,7 @@ export class ReaderTopicContextSurface<
 		return Object.freeze({
 			number: discoursePostNumber(anchor.dataset.postNumber),
 			scrollTop: Math.max(0, this.#discussionList.scrollTop),
-			scrollLeft: Math.max(0, this.#discussionList.scrollLeft),
+			scrollLeft: 0,
 			offset: anchor.getBoundingClientRect().top - listRect.top,
 		});
 	}
@@ -3038,7 +3141,7 @@ export class ReaderTopicContextSurface<
 		const anchoredScrollTop =
 			currentScrollTop + targetRect.top - listRect.top - point.offset;
 		this.#pendingRestorePoint = null;
-		this.#discussionList.scrollLeft = point.scrollLeft;
+		this.#discussionList.scrollLeft = 0;
 		this.#discussionList.scrollTop = Math.max(
 			0,
 			Number.isFinite(anchoredScrollTop)
@@ -3136,118 +3239,16 @@ export class ReaderTopicContextSurface<
 			const horizontalPadding = Number.isFinite(padding) ? padding : 0;
 			contentWidth = this.#discussionList.clientWidth - horizontalPadding;
 		}
-		const baseWidth = Math.max(320, contentWidth);
-		const maxDepth = snapshot.entries.reduce(
-			(depth, entry) => Math.max(depth, entry.depth),
-			0,
-		);
-		const visibleDepth = Math.max(
-			0,
-			Math.floor((baseWidth - 320) / 28),
-		);
-		const overflowDepth = Math.max(0, maxDepth - visibleDepth);
+		const baseWidth = Math.max(0, contentWidth);
 		this.#discussionList.style.setProperty(
 			'--ldp-descendant-tree-width',
-			`${baseWidth + overflowDepth * 28}px`,
+			`${baseWidth}px`,
 		);
 		this.#discussionList.style.setProperty(
-			'--ldp-descendant-tree-pan-width',
-			`${baseWidth + maxDepth * 28}px`,
+			'--ldp-descendant-min-post-width',
+			`${Math.min(320, baseWidth * .7)}px`,
 		);
-		const hasHorizontalOverflow =
-			overflowDepth > 0 ||
-			this.#discussionList.scrollWidth >
-				this.#discussionList.clientWidth + 1;
-		this.#discussionList.classList.toggle(
-			'ldp-descendant-tree-pannable',
-			hasHorizontalOverflow,
-		);
-		if (!hasHorizontalOverflow) this.#discussionList.scrollLeft = 0;
-	}
-
-	#onTreePanPointerDown(event: PointerEvent): void {
-		const target = eventElement(event);
-		const hasHorizontalOverflow =
-			this.#discussionList.classList.contains(
-				'ldp-descendant-tree-pannable',
-			) ||
-			this.#discussionList.scrollWidth >
-				this.#discussionList.clientWidth + 1;
-		if (
-			event.button !== 0 ||
-			(event.pointerType && event.pointerType !== 'mouse') ||
-			!hasHorizontalOverflow ||
-			!target ||
-			target.closest([
-				'button',
-				'a',
-				'input',
-				'select',
-				'textarea',
-				'[contenteditable="true"]',
-				'[role="button"]',
-				'.ldp-post-head',
-				'.ldp-content',
-				'.ldp-reactions',
-				'.ldp-boost-list',
-				'.ldp-sub-actions',
-				'.ldp-topic-footer-actions',
-				'img',
-				'video',
-				'audio',
-				'canvas',
-				'pre',
-				'code',
-			].join(','))
-		) {
-			return;
-		}
-		this.#treePan = {
-			pointerId: event.pointerId,
-			startX: event.clientX,
-			scrollLeft: this.#discussionList.scrollLeft,
-			moved: false,
-		};
-		try {
-			this.#discussionList.setPointerCapture?.(event.pointerId);
-		} catch {
-			// capture 不可用时仍可在列表内继续移动。
-		}
-	}
-
-	#onTreePanPointerMove(event: PointerEvent): void {
-		const pan = this.#treePan;
-		if (!pan || event.pointerId !== pan.pointerId) return;
-		const deltaX = event.clientX - pan.startX;
-		if (!pan.moved && Math.abs(deltaX) < 3) return;
-		pan.moved = true;
-		this.#discussionList.classList.add(
-			'ldp-descendant-tree-panning',
-		);
-		this.#discussionList.scrollLeft = pan.scrollLeft - deltaX;
-		event.preventDefault();
-	}
-
-	#stopTreePan(event?: PointerEvent): void {
-		const pan = this.#treePan;
-		if (!pan || event && event.pointerId !== pan.pointerId) return;
-		this.#treePan = null;
-		this.#discussionList.classList.remove(
-			'ldp-descendant-tree-panning',
-		);
-		try {
-			if (this.#discussionList.hasPointerCapture?.(pan.pointerId)) {
-				this.#discussionList.releasePointerCapture?.(pan.pointerId);
-			}
-		} catch {
-			// 已丢失 capture 时无需补偿。
-		}
-		if (pan.moved) {
-			this.#suppressTreeClick = true;
-			this.#requestFrame(() => {
-				this.#suppressTreeClick = false;
-			});
-		}
+		this.#discussionList.scrollLeft = 0;
 	}
 
 	#syncWorkspaceMode(fullPage: boolean): void {

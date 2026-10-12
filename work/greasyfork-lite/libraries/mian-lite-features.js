@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Features Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 功能库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.6
+// @version      1.6.7
 // @description  Feature modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 媒体、互动、设置、用户与其他功能模块
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.6 - main-lite-features
+/* Awesome LinuxDo Reader Lite 1.6.7 - main-lite-features
  * 媒体、互动、设置、用户与其他功能模块
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.6",
+			sourceVersion: "1.6.7",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -112,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.6") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.7") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -14953,7 +14953,7 @@ runtime.register("src/post/reader-post-action-feature.js", function(module, expo
 	    ), mobileActionsToggle.dataset.postActionsToggle = "", actions.append(mobileActionsToggle)) : (this.#syncPostActionsToggle(actions, !1), mobileActionsToggle?.remove()), mobileActionsToggle && (this.#syncPostActionsToggle(
 	      actions,
 	      actions.classList.contains("ldp-post-actions-expanded")
-	    ), actions.append(mobileActionsToggle)), !binding.contextHydrated) {
+	    ), actions.insertBefore(mobileActionsToggle, contextActions)), !binding.contextHydrated) {
 	      contextActions.replaceChildren(), contextActions.dataset.ldpContextActions = "0", contextActions.setAttribute("aria-hidden", "true");
 	      return;
 	    }
@@ -16382,7 +16382,7 @@ ${content}
 	    !binding || !binding.root.classList.contains("ldp-topic-action-rail-post") || (binding.open = !1, binding.topicActionRailExpanded = expanded, expanded && !binding.contextHydrated && (binding.contextHydrated = !0, this.#renderActions(binding), this.#renderTopicFooter(binding)), this.#syncTopicActionRailReply(binding), this.#clearReactionHoverTimers(binding.slot), this.#syncReactionPickerVisibility(binding));
 	  }
 	}
-}, "690074c2be1fbfe8cd21deab0113900640997e0258be3e3f423c1ac4679507fa");
+}, "5847f3bbfceb23fa413559008f6de2f7599cf48794a6c46c2a4a03ea36cbe90a");
 
 /* Source: lite/src/post/reader-post-management-action-coordinator.ts */
 runtime.register("src/post/reader-post-management-action-coordinator.js", function(module, exports, require) {
@@ -23774,15 +23774,21 @@ runtime.register("src/settings/reader-browser-storage-management.js", function(m
 runtime.register("src/settings/reader-custom-site-settings-form.js", function(module, exports, require) {
 	var reader_custom_site_settings_form_exports = {};
 	__export(reader_custom_site_settings_form_exports, {
-	  ReaderCustomSiteSettingsForm: () => ReaderCustomSiteSettingsForm
+	  ReaderCustomSiteSettingsForm: () => ReaderCustomSiteSettingsForm,
+	  readerCustomSiteMatchPattern: () => readerCustomSiteMatchPattern
 	});
 	module.exports = __toCommonJS(reader_custom_site_settings_form_exports);
 	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_custom_site_repository = require("../site/reader-custom-site-repository.js"), import_reader_settings_dom = require("./reader-settings-dom.js");
+	function readerCustomSiteMatchPattern(host) {
+	  return `https://${host}/*`;
+	}
 	class ReaderCustomSiteSettingsForm {
 	  scope;
 	  #host;
 	  #repository;
 	  #probe;
+	  #siteAccess;
+	  #clipboard;
 	  #input;
 	  #add;
 	  #list;
@@ -23790,7 +23796,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	  #operation = null;
 	  #epoch = 0;
 	  constructor(options) {
-	    this.#host = options.host, this.#repository = options.repository, this.#probe = options.probe, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
+	    this.#host = options.host, this.#repository = options.repository, this.#probe = options.probe, this.#siteAccess = options.siteAccess ?? null, this.#clipboard = options.clipboard ?? null, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope);
 	    const root = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "div",
@@ -23806,13 +23812,13 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    ), title = (0, import_reader_settings_dom.settingsElement)(options.document, "strong");
 	    title.textContent = "其他适用站点";
 	    const description = (0, import_reader_settings_dom.settingsElement)(options.document, "small");
-	    description.textContent = "Loader 默认仅运行于内置社区；额外获准运行的 Discourse 会提示保存，也可在此手动验证。", head.append(title, description);
+	    description.textContent = this.#siteAccess ? "添加 HTTPS Discourse 后，浏览器会请求该域名的精确站点权限。" : "Loader 默认仅运行于内置社区；额外获准运行的 Discourse 会提示保存，也可在此手动验证。", head.append(title, description);
 	    const form = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "form",
 	      "ldp-custom-site-form"
 	    );
-	    this.#input = (0, import_reader_settings_dom.settingsElement)(
+	    if (this.#input = (0, import_reader_settings_dom.settingsElement)(
 	      options.document,
 	      "input",
 	      "ldp-boost-rule-control ldp-custom-site-input"
@@ -23830,11 +23836,27 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	      options.document,
 	      "small",
 	      "ldp-custom-site-status"
-	    ), this.#status.role = "status", this.#status.setAttribute("aria-live", "polite"), this.#status.textContent = "正在读取已保存站点…", section.append(head, form, this.#list, this.#status), root.append(section), this.#host.replaceChildren(root), this.scope.listen(form, "submit", (event) => {
+	    ), this.#status.role = "status", this.#status.setAttribute("aria-live", "polite"), this.#status.textContent = "正在读取已保存站点…", this.#siteAccess)
+	      section.append(head, form, this.#list, this.#status);
+	    else {
+	      const guidance = (0, import_reader_settings_dom.settingsElement)(
+	        options.document,
+	        "small",
+	        "ldp-custom-site-guidance"
+	      );
+	      guidance.textContent = "在脚本管理器中添加用户匹配：Tampermonkey → 本脚本 → 设置 → 用户匹配，粘贴站点右侧的规则并确认。", section.append(head, form, guidance, this.#list, this.#status);
+	    }
+	    root.append(section), this.#host.replaceChildren(root), this.scope.listen(form, "submit", (event) => {
 	      event.preventDefault(), this.#submit();
 	    }), this.scope.listen(this.#list, "click", (event) => {
-	      const button = event.target?.closest("[data-custom-site-remove]");
-	      button?.dataset.customSiteRemove && this.#remove(button.dataset.customSiteRemove);
+	      const target = event.target?.closest("[data-custom-site-copy], [data-custom-site-remove]");
+	      if (!target) return;
+	      const copyHost = target.dataset.customSiteCopy;
+	      if (copyHost) {
+	        this.#copy(copyHost);
+	        return;
+	      }
+	      target.dataset.customSiteRemove && this.#remove(target.dataset.customSiteRemove);
 	    }), this.#repository.changes.subscribe(
 	      (sites) => this.#renderSites(sites),
 	      this.scope
@@ -23849,7 +23871,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	    try {
 	      const sites = await this.#repository.load();
 	      if (this.scope.destroyed) return;
-	      this.#renderSites(sites), this.#repository.writable ? this.#probe ? this.#status.textContent = "添加后仍需在脚本管理器中允许该域名运行。" : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限验证兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0) : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限保存兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0);
+	      this.#renderSites(sites), this.#repository.writable ? this.#probe ? this.#status.textContent = this.#siteAccess ? "添加时浏览器会弹出一次站点权限确认。" : "添加后仍需在脚本管理器中允许该域名运行。" : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限验证兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0) : (this.#status.textContent = "当前页面仍可本地识别；脚本没有权限保存兼容兜底站点。", this.#input.disabled = !0, this.#add.disabled = !0);
 	    } catch (cause) {
 	      if (this.scope.destroyed) return;
 	      this.#status.textContent = cause instanceof Error ? `读取站点失败：${cause.message}` : "读取站点失败。", this.#input.disabled = !0, this.#add.disabled = !0;
@@ -23866,21 +23888,31 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	      this.#status.textContent = `${host} 已内置支持，无需重复添加。`;
 	      return;
 	    }
-	    if (this.#repository.snapshot.includes(host)) {
-	      this.#status.textContent = `${host} 已在兼容兜底列表中。`;
-	      return;
-	    }
-	    const epoch = ++this.#epoch;
+	    const alreadySaved = this.#repository.snapshot.includes(host), epoch = ++this.#epoch;
 	    this.#operation?.abort(new Error("开始新的站点检测"));
 	    const operation = new AbortController();
-	    this.#operation = operation, this.#input.disabled = !0, this.#add.disabled = !0, this.#add.setAttribute("aria-busy", "true"), this.#status.textContent = "正在检测 Discourse…";
+	    this.#operation = operation, this.#input.disabled = !0, this.#add.disabled = !0, this.#add.setAttribute("aria-busy", "true"), this.#status.textContent = this.#siteAccess ? "正在请求浏览器站点权限…" : "正在检测 Discourse…";
+	    let accessGranted = !1;
 	    try {
+	      if (this.#siteAccess) {
+	        if (accessGranted = await this.#siteAccess.request(host), !accessGranted)
+	          throw new Error("未授予该站点的浏览器权限");
+	        if (this.scope.destroyed || epoch !== this.#epoch) return;
+	        this.#status.textContent = alreadySaved ? "正在恢复站点运行权限…" : "正在检测 Discourse…";
+	      }
+	      if (alreadySaved) {
+	        this.#status.textContent = this.#siteAccess ? `已允许 ${readerCustomSiteMatchPattern(host)}；刷新该站点即可运行。` : `${host} 已在兼容兜底列表中。`;
+	        return;
+	      }
 	      const info = await this.#probe.probe(host, operation.signal);
 	      if (await this.#repository.add(host), this.scope.destroyed || epoch !== this.#epoch) return;
-	      this.#input.value = "", this.#status.textContent = `已添加 ${info.title || host}；还需在脚本管理器中允许该域名运行。`;
+	      this.#input.value = "";
+	      const pattern = readerCustomSiteMatchPattern(host);
+	      this.#status.textContent = this.#siteAccess ? `已添加 ${info.title || host}；浏览器已允许 ${pattern}，刷新该站点即可运行。` : `已添加 ${info.title || host}；请复制 ${pattern} 添加到脚本管理器“用户匹配”。`;
 	    } catch (cause) {
 	      if (this.scope.destroyed || epoch !== this.#epoch || operation.signal.aborted) return;
-	      this.#status.textContent = `${cause instanceof Error ? cause.message : "检测失败"}；仅支持 Discourse 论坛。`;
+	      accessGranted && !alreadySaved && this.#siteAccess?.remove(host).catch(() => {
+	      }), this.#status.textContent = `${cause instanceof Error ? cause.message : "检测失败"}${accessGranted ? "；仅支持 Discourse 论坛。" : "。"}`;
 	    } finally {
 	      !this.scope.destroyed && epoch === this.#epoch && (this.#operation = null, this.#input.disabled = !1, this.#add.disabled = !1, this.#add.removeAttribute("aria-busy"));
 	    }
@@ -23888,7 +23920,7 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	  async #remove(host) {
 	    if (!this.scope.destroyed)
 	      try {
-	        await this.#repository.remove(host), this.scope.destroyed || (this.#status.textContent = `已移除 ${host}。`);
+	        await this.#siteAccess?.remove(host), await this.#repository.remove(host), this.scope.destroyed || (this.#status.textContent = `已移除 ${host}。`);
 	      } catch (cause) {
 	        this.scope.destroyed || (this.#status.textContent = cause instanceof Error ? `移除失败：${cause.message}` : "移除失败。");
 	      }
@@ -23900,18 +23932,43 @@ runtime.register("src/settings/reader-custom-site-settings-form.js", function(mo
 	        "span",
 	        "ldp-custom-site-item"
 	      ), label = (0, import_reader_settings_dom.settingsElement)(this.#host.ownerDocument, "span");
-	      label.textContent = host;
+	      if (label.textContent = host, item.append(label), !this.#siteAccess) {
+	        const rule = (0, import_reader_settings_dom.settingsElement)(
+	          this.#host.ownerDocument,
+	          "code",
+	          "ldp-custom-site-rule"
+	        );
+	        if (rule.textContent = readerCustomSiteMatchPattern(host), item.append(rule), this.#clipboard) {
+	          const copy = (0, import_reader_settings_dom.settingsButton)(
+	            this.#host.ownerDocument,
+	            "ldp-custom-site-copy",
+	            `复制 ${host} 的用户匹配规则`,
+	            "copy",
+	            "复制规则"
+	          );
+	          copy.dataset.customSiteCopy = host, item.append(copy);
+	        }
+	      }
 	      const remove = (0, import_reader_settings_dom.settingsButton)(
 	        this.#host.ownerDocument,
 	        "ldp-custom-site-remove",
 	        `移除 ${host}`,
 	        "x"
 	      );
-	      return remove.dataset.customSiteRemove = host, item.append(label, remove), item;
+	      return remove.dataset.customSiteRemove = host, item.append(remove), item;
 	    })), this.#list.hidden = sites.length === 0;
 	  }
+	  async #copy(host) {
+	    if (this.scope.destroyed || !this.#clipboard) return;
+	    const pattern = readerCustomSiteMatchPattern(host);
+	    try {
+	      await this.#clipboard.copyText(pattern), this.scope.destroyed || (this.#status.textContent = `已复制 ${pattern}；请在脚本管理器“用户匹配”中粘贴并确认。`);
+	    } catch {
+	      this.scope.destroyed || (this.#status.textContent = `复制失败，请手动复制 ${pattern}。`);
+	    }
+	  }
 	}
-}, "9744a53286d115e56b5da2c05c194c89ac38db31d91f5f9d96607189dd4fa05c");
+}, "fed9bf671e99e3ff8cc5f3bd418aaecb1f13e66d962d6cf4cbf3a9b2125677d0");
 
 /* Source: lite/src/settings/reader-font-settings-form.ts */
 runtime.register("src/settings/reader-font-settings-form.js", function(module, exports, require) {
@@ -24993,6 +25050,7 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	  #aggregateDescendants;
 	  #treeDepth;
 	  #hideNestedFloors;
+	  #showHiddenAvatars;
 	  #nestedWarning;
 	  #mode;
 	  #prefix;
@@ -25017,7 +25075,8 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	        "expandLeafNestedReplies",
 	        "aggregateDescendantReplies",
 	        "inlineReplyTreeMaxDepth",
-	        "hideNestedReplyFloors"
+	        "hideNestedReplyFloors",
+	        "showHiddenReplyAvatarsByDefault"
 	      ],
 	      this.#replyTree.read(options.readPreferences())
 	    );
@@ -25117,7 +25176,20 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	      "二级回复固定收纳到对应父楼层。",
 	      hideFloorsSwitch.root
 	    );
-	    hideNestedFloorsRow.dataset.settingHelp = "未启用“完整讨论”时，从楼层列表隐藏全部二级回复；启用后先保留未读二级回复，读过后再隐藏。时间轴、跳转和已读记录不受影响；跳转时会临时显示或打开对应讨论。修改后立即保存并应用到当前帖子。", hideNestedFloorsRow.hidden = !0, treeSection.append(hideNestedFloorsRow), this.#nestedWarning = (0, import_reader_settings_dom.settingsElement)(
+	    hideNestedFloorsRow.dataset.settingHelp = "未启用“完整讨论”时，从楼层列表隐藏全部二级回复；启用后先保留未读二级回复，读过后再隐藏。时间轴、跳转和已读记录不受影响；跳转时会临时显示或打开对应讨论。修改后立即保存并应用到当前帖子。", hideNestedFloorsRow.hidden = !0, treeSection.append(hideNestedFloorsRow);
+	    const showHiddenAvatarsSwitch = (0, import_reader_settings_dom.settingsSwitch)(
+	      document,
+	      "默认显示隐藏楼层头像",
+	      "ldp-show-hidden-reply-avatars-default"
+	    );
+	    this.#showHiddenAvatars = showHiddenAvatarsSwitch.input;
+	    const showHiddenAvatarsRow = (0, import_reader_settings_dom.settingsOptionRow)(
+	      document,
+	      "默认显示隐藏楼层头像",
+	      "默认常显，最多显示 10 个头像；更多头像通过“+N”查看。三角按钮可临时收起。",
+	      showHiddenAvatarsSwitch.root
+	    );
+	    showHiddenAvatarsRow.dataset.settingHelp = "开启后直接显示分隔线上的隐藏楼层头像，关闭后点击三角展开。悬停或触屏长按头像预览发言，直接点击进入完整讨论。预览移开后仍保留，点击空白关闭；更多头像在“+N”的竖向列表中查看。细色环区分已读、未读和未知状态。修改后立即应用到当前帖子。", treeSection.append(showHiddenAvatarsRow), this.#nestedWarning = (0, import_reader_settings_dom.settingsElement)(
 	      document,
 	      "p",
 	      "ldp-nested-display-warning"
@@ -25336,6 +25408,11 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	        "hideNestedReplyFloors",
 	        this.#hideNestedFloors.checked
 	      ), this.#afterTreeEdit();
+	    }), this.scope.listen(this.#showHiddenAvatars, "change", () => {
+	      this.#treeDraft.set(
+	        "showHiddenReplyAvatarsByDefault",
+	        this.#showHiddenAvatars.checked
+	      ), this.#afterTreeEdit();
 	    }), this.scope.listen(this.#mode, "change", () => {
 	      this.#boostDraft.set(
 	        "mode",
@@ -25382,7 +25459,7 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	    this.#railVisible.checked = rail.visible, this.#railFixed.checked = rail.fixed, this.#railPositionReset.disabled = railPositionsDefault, this.#expandNested.checked = tree.expandNestedRepliesByDefault, this.#expandLeaf.checked = tree.expandLeafNestedReplies, this.#aggregateDescendants.checked = tree.aggregateDescendantReplies;
 	    for (const option of [...this.#treeDepth.options])
 	      option.selected = option.value === String(tree.inlineReplyTreeMaxDepth);
-	    this.#treeDepth.disabled = !tree.aggregateDescendantReplies || !tree.expandNestedRepliesByDefault, this.#hideNestedFloors.checked = tree.hideNestedReplyFloors, this.#nestedWarning.hidden = !(tree.expandNestedRepliesByDefault && tree.expandLeafNestedReplies);
+	    this.#treeDepth.disabled = !tree.aggregateDescendantReplies || !tree.expandNestedRepliesByDefault, this.#hideNestedFloors.checked = tree.hideNestedReplyFloors, this.#showHiddenAvatars.checked = tree.showHiddenReplyAvatarsByDefault, this.#nestedWarning.hidden = !(tree.expandNestedRepliesByDefault && tree.expandLeafNestedReplies);
 	    for (const option of [...this.#mode.options])
 	      option.selected = option.value === value.mode;
 	    this.#prefix.value = value.prefix, this.#counterMarker.value = value.counterMarker, this.#counterStep.value = Number.isFinite(value.counterStep) ? String(value.counterStep) : "", this.#fixedSuffix.value = value.fixedSuffix;
@@ -25398,7 +25475,7 @@ runtime.register("src/settings/reader-interaction-settings-form.js", function(mo
 	    ));
 	  }
 	}
-}, "5951b3fa7d0abdbb874090474c4ce401470c05d0b1d1f5c76db047d3d52001a5");
+}, "3b6772aefad50c58536fd68e27710f66645b6cc19d25c8948e96c874104da143");
 
 /* Source: lite/src/settings/reader-layout-settings-form.ts */
 runtime.register("src/settings/reader-layout-settings-form.js", function(module, exports, require) {
@@ -25948,6 +26025,130 @@ runtime.register("src/settings/reader-motion-settings-form.js", function(module,
 	}
 }, "6f9799c07c5a4cdaf30ec3bedf89c6fe9893a44e466ca600a798b5706dae2010");
 
+/* Source: lite/src/settings/reader-network-settings-group.ts */
+runtime.register("src/settings/reader-network-settings-group.js", function(module, exports, require) {
+	var reader_network_settings_group_exports = {};
+	__export(reader_network_settings_group_exports, {
+	  READER_COMMUNITY_DOH_URL: () => READER_COMMUNITY_DOH_URL,
+	  createReaderNetworkSettingsGroup: () => createReaderNetworkSettingsGroup
+	});
+	module.exports = __toCommonJS(reader_network_settings_group_exports);
+	var import_browser_share_surface = require("../userscript/browser-share-surface.js"), import_reader_settings_dom = require("./reader-settings-dom.js");
+	const READER_COMMUNITY_DOH_URL = "https://edge.1molchuan.top/linuxdo";
+	let nextGuideId = 0;
+	const browserGuides = Object.freeze([
+	  {
+	    id: "chrome",
+	    name: "Chrome / Chromium",
+	    url: "chrome://settings/security",
+	    steps: "开启“使用安全 DNS”，选择自定义提供商，粘贴上方 DoH 地址并保存。"
+	  },
+	  {
+	    id: "edge",
+	    name: "Microsoft Edge",
+	    url: "edge://settings/privacy",
+	    steps: "在“安全性”中开启安全 DNS，选择自定义服务提供商，粘贴上方 DoH 地址并保存。"
+	  },
+	  {
+	    id: "firefox",
+	    name: "Firefox",
+	    url: "about:preferences#privacy",
+	    steps: "在“基于 HTTPS 的 DNS”中选择增强保护或最大保护，再选择自定义提供商，粘贴上方 DoH 地址并保存。"
+	  }
+	]);
+	function createReaderNetworkSettingsGroup(options) {
+	  const { document, scope } = options, clipboard = options.clipboard ?? new import_browser_share_surface.BrowserReaderShareSurface(document.defaultView), group = (0, import_reader_settings_dom.settingsElement)(document, "section", "ldp-settings-category-group");
+	  group.dataset.settingsCategory = "performance-network";
+	  const head = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-settings-category-head");
+	  head.append((0, import_reader_settings_dom.settingsCopy)(
+	    document,
+	    "ldp-network-heading",
+	    "浏览器 DoH 配置",
+	    "需在浏览器设置中配置后生效，作用于整个浏览器的联网。"
+	  ));
+	  const content = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-content"), preset = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-preset"), icon = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-network-preset-icon");
+	  icon.append((0, import_reader_settings_dom.settingsIcon)(document, "link"));
+	  const name = (0, import_reader_settings_dom.settingsElement)(document, "strong", "ldp-network-preset-name");
+	  name.textContent = "一摩尔氚 DoH";
+	  const badge = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-network-badge");
+	  badge.textContent = "普通版", preset.append(icon, name, badge), content.append(preset);
+	  const status = (0, import_reader_settings_dom.settingsElement)(document, "small", "ldp-network-status");
+	  status.dataset.networkStatus = "", status.setAttribute("role", "status"), status.setAttribute("aria-live", "polite");
+	  const addressControl = (host, label, value, key) => {
+	    const row = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-address-controls"), input = (0, import_reader_settings_dom.settingsElement)(document, "input", "ldp-network-input");
+	    input.type = "text", input.readOnly = !0, input.value = value, input.setAttribute("aria-label", label), input.dataset.networkAddress = key;
+	    const copy = (0, import_reader_settings_dom.settingsButton)(
+	      document,
+	      "ldp-network-copy",
+	      "复制" + label,
+	      "copy",
+	      "复制地址"
+	    );
+	    return copy.dataset.networkCopy = key, scope.listen(copy, "click", () => {
+	      copy.disabled || scope.destroyed || (copy.disabled = !0, status.textContent = "", (async () => {
+	        try {
+	          await clipboard.copyText(input.value), scope.destroyed || (status.textContent = "已复制" + label + "。");
+	        } catch {
+	          if (scope.destroyed) return;
+	          input.focus(), input.select?.(), status.textContent = "自动复制不可用，请手动复制上面的" + label + "。";
+	        } finally {
+	          scope.destroyed || (copy.disabled = !1);
+	        }
+	      })());
+	    }), row.append(input, copy), host.append(row), input;
+	  };
+	  addressControl(content, "DoH 地址", READER_COMMUNITY_DOH_URL, "doh");
+	  const toolbar = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-toolbar"), toggle = (0, import_reader_settings_dom.settingsButton)(
+	    document,
+	    "ldp-network-toggle",
+	    "查看浏览器 DoH 配置步骤",
+	    "chevron-down",
+	    "查看配置步骤"
+	  );
+	  toggle.dataset.networkToggle = "", toggle.setAttribute("aria-expanded", "false");
+	  const source = (0, import_reader_settings_dom.settingsElement)(document, "a", "ldp-network-source");
+	  source.href = "https://linux.do/t/2946664", source.target = "_blank", source.rel = "noopener noreferrer", source.textContent = "服务说明", source.append((0, import_reader_settings_dom.settingsIcon)(document, "external-link")), toolbar.append(toggle, source);
+	  const guide = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-guide");
+	  guide.id = "ldp-network-guide-" + ++nextGuideId, guide.dataset.networkGuide = "", guide.hidden = !0, toggle.setAttribute("aria-controls", guide.id);
+	  const browserRow = (0, import_reader_settings_dom.settingsElement)(document, "label", "ldp-network-browser-row"), browserLabel = (0, import_reader_settings_dom.settingsElement)(document, "span", "ldp-network-browser-label");
+	  browserLabel.textContent = "你使用的浏览器";
+	  const browser = (0, import_reader_settings_dom.settingsElement)(document, "select", "ldp-reader-select ldp-network-browser");
+	  browser.setAttribute("aria-label", "配置 DoH 的浏览器"), browser.dataset.networkBrowser = "";
+	  const userAgent = document.defaultView?.navigator.userAgent ?? "", browserId = /\bEdg\//.test(userAgent) ? "edge" : /\bFirefox\//.test(userAgent) ? "firefox" : "chrome";
+	  for (const item of browserGuides) {
+	    const option = (0, import_reader_settings_dom.settingsOption)(document, item.id, item.name);
+	    option.selected = item.id === browserId, browser.append(option);
+	  }
+	  browserRow.append(browserLabel, browser), guide.append(browserRow);
+	  const steps = (0, import_reader_settings_dom.settingsElement)(document, "ol", "ldp-network-steps"), step = (title, description) => {
+	    const item = (0, import_reader_settings_dom.settingsElement)(document, "li", "ldp-network-step");
+	    item.dataset.networkStep = String(steps.children.length + 1);
+	    const body = (0, import_reader_settings_dom.settingsElement)(document, "div", "ldp-network-step-body"), heading = (0, import_reader_settings_dom.settingsElement)(document, "strong", "ldp-network-step-title");
+	    heading.textContent = title;
+	    const copy = (0, import_reader_settings_dom.settingsElement)(document, "p", "ldp-network-step-copy");
+	    return copy.textContent = description, body.append(heading, copy), item.append(body), steps.append(item), body;
+	  };
+	  step("复制 DoH 地址", "点击上方“复制地址”，用于填写自定义 DNS 提供商。");
+	  const browserStep = step("打开浏览器设置", "复制下面的设置地址，粘贴到浏览器地址栏打开。"), settingsAddress = addressControl(browserStep, "浏览器设置地址", "", "browser"), saveStep = step("启用安全 DNS 并保存", ""), instructions = saveStep.querySelector(".ldp-network-step-copy");
+	  instructions.dataset.networkSteps = "";
+	  const refresh = (0, import_reader_settings_dom.settingsElement)(document, "p", "ldp-network-step-copy");
+	  refresh.textContent = "保存后刷新论坛，阅读器继续使用原站登录会话。", saveStep.append(refresh);
+	  const managed = (0, import_reader_settings_dom.settingsElement)(document, "p", "ldp-network-managed-note");
+	  managed.textContent = "如果浏览器提示“受管理，已停用”，需先检查浏览器管理策略；阅读器无法解除这个限制。", guide.append(steps, managed);
+	  const note = (0, import_reader_settings_dom.settingsElement)(document, "p", "ldp-network-note");
+	  note.textContent = "DoH / ECH 是网络辅助方案，不能保证减少 CF 盾或免除站点验证。";
+	  const renderBrowser = () => {
+	    const selected = browserGuides.find((item) => item.id === browser.value) ?? browserGuides[0];
+	    settingsAddress.value = selected.url, instructions.textContent = selected.steps, status.textContent = "";
+	  };
+	  return scope.listen(browser, "change", renderBrowser), scope.listen(toggle, "click", () => {
+	    guide.hidden = !guide.hidden, toggle.setAttribute("aria-expanded", String(!guide.hidden));
+	    const text = toggle.querySelector("span");
+	    text.textContent = guide.hidden ? "查看配置步骤" : "收起配置步骤", status.textContent = "";
+	  }), renderBrowser(), content.append(toolbar, status, guide, note), group.append(head, content), group;
+	}
+}, "0dd46dbebd0402ad40b4cf9e8a4ca8a9074f00e232093100832a17c8fb43d2f5");
+
 /* Source: lite/src/settings/reader-numeric-settings-draft.ts */
 runtime.register("src/settings/reader-numeric-settings-draft.js", function(module, exports, require) {
 	var reader_numeric_settings_draft_exports = {};
@@ -26128,7 +26329,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	  readerPreferencesPerformanceSettingsAdapter: () => readerPreferencesPerformanceSettingsAdapter
 	});
 	module.exports = __toCommonJS(reader_performance_settings_form_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_business_request_config = require("../network/reader-business-request-config.js"), import_reader_request_flow_config = require("../network/reader-request-flow-config.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_numeric_settings_draft = require("./reader-numeric-settings-draft.js");
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_preferences_schema = require("../state/reader-preferences-schema.js"), import_reader_business_request_config = require("../network/reader-business-request-config.js"), import_reader_request_flow_config = require("../network/reader-request-flow-config.js"), import_reader_business_request_policy = require("../network/reader-business-request-policy.js"), import_reader_settings_dom = require("./reader-settings-dom.js"), import_reader_numeric_settings_draft = require("./reader-numeric-settings-draft.js"), import_reader_network_settings_group = require("./reader-network-settings-group.js");
 	const readerPreferencesPerformanceSettingsAdapter = Object.freeze({
 	  readConfig: import_reader_preferences_schema.readReaderPerformanceConfig,
 	  createPatch: import_reader_preferences_schema.createReaderPerformancePreferencesPatch,
@@ -26629,6 +26830,10 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	      "div",
 	      "ldp-settings-category-groups"
 	    );
+	    categoryGroups.append((0, import_reader_network_settings_group.createReaderNetworkSettingsGroup)({
+	      document: options.document,
+	      scope: this.scope
+	    }));
 	    for (const group of groups) {
 	      const groupNode = (0, import_reader_settings_dom.settingsElement)(
 	        options.document,
@@ -26924,7 +27129,7 @@ runtime.register("src/settings/reader-performance-settings-form.js", function(mo
 	    this.#status.textContent = risky ? `${status} 风险提示：高于默认值的负载目标可能增加卡顿或 429；不确定时请恢复默认。` : status, this.#status.classList.toggle("is-risk", risky);
 	  }
 	}
-}, "d2bddcba76c103cf54512e1c847213078e9981819ea37bd7bc65765068c7e9e8");
+}, "db0f0dd58d156f159984f73a1ea6c33b5f7cd951358e3ff8da67bd98d1c62313");
 
 /* Source: lite/src/settings/reader-reading-settings-form.ts */
 runtime.register("src/settings/reader-reading-settings-form.js", function(module, exports, require) {
@@ -27326,8 +27531,8 @@ runtime.register("src/settings/reader-settings-controller.js", function(module, 
 	    id: "performance",
 	    groupId: "system-data",
 	    title: "性能设置",
-	    description: "调整批量、保留、预加载与请求上限，自动适配设备和网络。",
-	    keywords: ["预加载", "并发", "限流", "缓存", "滚动", "资源"]
+	    description: "提供浏览器 DoH 配置指引；调整批量、保留、预加载与请求上限，自动适配设备和网络。",
+	    keywords: ["预加载", "并发", "限流", "缓存", "滚动", "资源", "联网", "dns", "doh", "ech", "cf盾", "一摩尔氚"]
 	  },
 	  {
 	    id: "logs",
@@ -27641,7 +27846,7 @@ runtime.register("src/settings/reader-settings-controller.js", function(module, 
 	      throw new Error("设置 controller 已销毁");
 	  }
 	}
-}, "6f1533d5530346617cc5af3023731bada952bff67c8888a7650e55ce0a99bd18");
+}, "5f1db6de2d91c1138b9a71842a921e6eec537d77a40c97ffd3b9d1830ebb7427");
 
 /* Source: lite/src/settings/reader-settings-dom.ts */
 runtime.register("src/settings/reader-settings-dom.js", function(module, exports, require) {
@@ -33156,7 +33361,7 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	      )), view;
 	    const profile = snapshot.profile, communityScoreValue = snapshot.communityScore.phase === "ready" ? metric(snapshot.communityScore.metrics.score) || "暂无数据" : snapshot.communityScore.phase === "loading" ? "获取中…" : snapshot.communityScore.phase === "error" ? [401, 403].includes(
 	      Number(snapshot.communityScore.errorStatus)
-	    ) ? "请先登录" : snapshot.communityScore.errorStatus !== null && snapshot.communityScore.errorStatus !== void 0 ? "加载失败" : "请登录后重试" : "登录后查看", card = (0, import_html_element.htmlElement)(this.#document, "section", "ldp-user-info-profile");
+	    ) ? "请先登录" : snapshot.communityScore.errorStatus !== null && snapshot.communityScore.errorStatus !== void 0 ? "加载失败" : "请登录后重试" : "登录后查看", communityScoreLoginRequired = snapshot.communityScore.phase === "idle" || snapshot.communityScore.phase === "error" && (snapshot.communityScore.errorStatus === null || snapshot.communityScore.errorStatus === void 0 || [401, 403].includes(Number(snapshot.communityScore.errorStatus))), card = (0, import_html_element.htmlElement)(this.#document, "section", "ldp-user-info-profile");
 	    card.setAttribute("aria-label", "当前用户资料");
 	    const cover = (0, import_html_element.htmlElement)(this.#document, "div", "ldp-user-info-cover"), background = profile.media.find((item) => item.kind === "card-background" || item.kind === "profile-background");
 	    if (background) {
@@ -33327,19 +33532,24 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	            "span",
 	            `ldp-user-profile-fact${item.accent ? " is-accent" : ""}${item.wide ? " is-wide" : ""}${item.glow ? " is-community-score" : ""}`
 	          );
-	          fact.dataset.userProfileFact = item.key, fact.append(
+	          fact.dataset.userProfileFact = item.key;
+	          const loginLink = item.key === "community-score" && communityScoreLoginRequired, value = (0, import_html_element.htmlElement)(
+	            this.#document,
+	            loginLink ? "a" : "span",
+	            "ldp-user-profile-fact-value",
+	            item.value
+	          );
+	          loginLink && (value.setAttribute("href", "https://cdk.linux.do/login"), value.setAttribute("target", "_blank"), value.setAttribute("rel", "noopener noreferrer"), value.setAttribute(
+	            "aria-label",
+	            "登录 CDK 查看社区分数（在新标签页打开）"
+	          )), fact.append(
 	            (0, import_html_element.htmlElement)(
 	              this.#document,
 	              "span",
 	              "ldp-user-profile-fact-label",
 	              item.label
 	            ),
-	            (0, import_html_element.htmlElement)(
-	              this.#document,
-	              "span",
-	              "ldp-user-profile-fact-value",
-	              item.value
-	            )
+	            value
 	          ), groupNode.append(fact);
 	        }
 	        groupNode.childElementCount && factList.append(groupNode);
@@ -33829,7 +34039,7 @@ runtime.register("src/user/reader-settings-user-view.js", function(module, expor
 	    return card.append(stats, details, actions), view.append(card), view;
 	  }
 	}
-}, "ac5c09fddff349fe039d3fd35342db23b1f92b88f2f4fd999686a7139e557ef5");
+}, "a428770db25116bcd11370baa059c09555ae53d86475eafa69bf5d3a306f4b2d");
 
 /* Source: lite/src/user/reader-user-badge-icon.ts */
 runtime.register("src/user/reader-user-badge-icon.js", function(module, exports, require) {

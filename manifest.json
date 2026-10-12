@@ -1,0 +1,86 @@
+{
+  "manifest_version": 3,
+  "name": "Linux DO 增强阅读",
+  "version": "1.0.136",
+  "description": "LINUX DO 阅读器浮窗、列表嵌入与 Chrome 侧边栏阅读。",
+  "permissions": [
+    "sidePanel",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://linux.do/*",
+    "https://community.brave.com/*",
+    "https://devforum.roblox.com/*",
+    "https://community.openai.com/*",
+    "https://community.home-assistant.io/*",
+    "https://forum.cfx.re/*",
+    "https://community.spiceworks.com/*",
+    "https://forum.arduino.cc/*",
+    "https://discussions.unity.com/*",
+    "https://community.cloudflare.com/*",
+    "https://forums.unrealengine.com/*",
+    "https://forum.obsidian.md/*",
+    "https://forum.cursor.com/*",
+    "https://forum.godotengine.org/*",
+    "https://community.n8n.io/*",
+    "https://forum.mikrotik.com/*",
+    "https://meta.discourse.org/*",
+    "https://discuss.python.org/*",
+    "https://forums.swift.org/*",
+    "https://discourse.julialang.org/*",
+    "https://users.rust-lang.org/*",
+    "https://connect.linux.do/*",
+    "https://credit.linux.do/*",
+    "https://cdk.linux.do/*",
+    "https://translate.googleapis.com/*",
+    "https://edge.microsoft.com/*",
+    "https://api-edge.cognitive.microsofttranslator.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "extension/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Linux DO 增强阅读"
+  },
+  "side_panel": {
+    "default_path": "extension/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://linux.do/*",
+        "https://community.brave.com/*",
+        "https://devforum.roblox.com/*",
+        "https://community.openai.com/*",
+        "https://community.home-assistant.io/*",
+        "https://forum.cfx.re/*",
+        "https://community.spiceworks.com/*",
+        "https://forum.arduino.cc/*",
+        "https://discussions.unity.com/*",
+        "https://community.cloudflare.com/*",
+        "https://forums.unrealengine.com/*",
+        "https://forum.obsidian.md/*",
+        "https://forum.cursor.com/*",
+        "https://forum.godotengine.org/*",
+        "https://community.n8n.io/*",
+        "https://forum.mikrotik.com/*",
+        "https://meta.discourse.org/*",
+        "https://discuss.python.org/*",
+        "https://forums.swift.org/*",
+        "https://discourse.julialang.org/*",
+        "https://users.rust-lang.org/*"
+      ],
+      "js": [
+        "extension/lite-userscript-compat.js",
+        "work/main-lite.standalone.user.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

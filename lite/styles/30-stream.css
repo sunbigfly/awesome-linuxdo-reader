@@ -1200,23 +1200,18 @@ button.ldp-floor:hover {
 
 .ldp-context-actions-slot {
   display: inline-flex;
-  width: 0;
+  /* 在收纳入口后保留工具位置，悬停只改变可见性，避免行高和入口来回移动。 */
+  width: max(0px, calc(var(--ldp-context-action-count, 0) * 22px - 2px));
   min-width: 0;
   height: 20px;
   flex: none;
   align-items: center;
   gap: 2px;
-  overflow: hidden;
-  transition: width var(--ldp-motion-fast) ease-out;
+  overflow: visible;
 }
 
 .ldp-context-actions-slot:empty {
   pointer-events: none;
-}
-
-.ldp-reactions:is(:hover,:focus-within) .ldp-context-actions-slot {
-  width: calc(var(--ldp-context-action-count, 0) * 22px - 2px);
-  overflow: visible;
 }
 
 .ldp-actions .ldp-context-action {

@@ -23,6 +23,12 @@ const gmValueListeners = new Map<number, (
 	remote: boolean,
 ) => void>();
 let gmValueListenerId = 0;
+let gmMenuId = 0;
+const gmMenuCaptions: string[] = [];
+const gmMenuCallbacks = new Map<number, () => void>();
+const gmRemovedMenus: number[] = [];
+const requestedSiteHosts: string[] = [];
+const removedSiteHosts: string[] = [];
 const sharedTargets: unknown[] = [];
 const copiedTexts: string[] = [];
 const katexCalls: string[] = [];
@@ -183,6 +189,25 @@ const userscriptGlobal = {
 	GM_removeValueChangeListener(listenerId: number) {
 		gmValueListeners.delete(listenerId);
 	},
+	GM_registerMenuCommand(caption: string, listener: () => void) {
+		gmMenuId += 1;
+		gmMenuCaptions.push(caption);
+		gmMenuCallbacks.set(gmMenuId, listener);
+		return gmMenuId;
+	},
+	GM_unregisterMenuCommand(commandId: number) {
+		gmRemovedMenus.push(commandId);
+		gmMenuCallbacks.delete(commandId);
+	},
+	readerExtensionSiteAccess: {
+		async request(host: string) {
+			requestedSiteHosts.push(host);
+			return true;
+		},
+		async remove(host: string) {
+			removedSiteHosts.push(host);
+		},
+	},
 	GM_getResourceText(name: string) {
 		return name === 'ldpReaderStyles' ? '.ldp-overlay{display:block;}' : '';
 	},
@@ -192,6 +217,56 @@ assert(
 	environment.pageWindow === pageWindow &&
 	environment.discourseHost.lookup('service:message-bus') === messageBus,
 	'userscript 环境必须只通过 unsafeWindow 构造 Discourse 原生宿主桥',
+);
+let menuInvocations = 0;
+const unregisterMenu = environment.registerMenuCommand(
+	'添加适用站点 / Match',
+	() => {
+		menuInvocations += 1;
+	},
+);
+gmMenuCallbacks.get(1)?.();
+unregisterMenu?.();
+await Promise.resolve();
+assert(
+	gmMenuCaptions[0] === '添加适用站点 / Match' &&
+		menuInvocations === 1 &&
+		gmRemovedMenus[0] === 1 &&
+		!gmMenuCallbacks.has(1),
+	'油猴菜单入口必须集中注册，并返回可回收的注销函数',
+);
+const customSiteAccess = environment.createCustomSiteAccess();
+assert(
+	await customSiteAccess?.request('forum.example.com') === true,
+	'扩展环境必须投影可选站点权限申请端口',
+);
+await customSiteAccess?.remove('forum.example.com');
+assert(
+	requestedSiteHosts[0] === 'forum.example.com' &&
+		removedSiteHosts[0] === 'forum.example.com',
+	'扩展站点权限端口必须原样转发规范化 host 的申请与撤销',
+);
+// 回归：扩展 compat shim 只暴露 __LDP_EXTENSION_SITE_ACCESS__
+// （extension/lite-userscript-compat.js），并不经过 standalone 构建别名。
+// 运行时必须同样认这个名字，否则设置面板会静默回退到手动改用户匹配。
+const shimHosts: string[] = [];
+const shimAccess = new BrowserUserscriptEnvironment({
+	userscriptGlobal: {
+		unsafeWindow: {},
+		__LDP_EXTENSION_SITE_ACCESS__: {
+			async request(host: string) {
+				shimHosts.push(host);
+				return true;
+			},
+			async remove() {},
+		},
+	},
+}).createCustomSiteAccess();
+assert(
+	shimAccess !== null &&
+		await shimAccess.request('forum.shim.example') === true &&
+		shimHosts[0] === 'forum.shim.example',
+	'扩展 shim 暴露的 __LDP_EXTENSION_SITE_ACCESS__ 必须被运行时识别',
 );
 let runtimeReadinessStep = 0;
 let runtimeReadinessNow = 0;

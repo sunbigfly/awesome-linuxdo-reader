@@ -107,6 +107,7 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 	readonly #aggregateDescendants: HTMLInputElement;
 	readonly #treeDepth: HTMLSelectElement;
 	readonly #hideNestedFloors: HTMLInputElement;
+	readonly #showHiddenAvatars: HTMLInputElement;
 	readonly #nestedWarning: HTMLElement;
 	readonly #mode: HTMLSelectElement;
 	readonly #prefix: HTMLInputElement;
@@ -145,6 +146,7 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 				'aggregateDescendantReplies',
 				'inlineReplyTreeMaxDepth',
 				'hideNestedReplyFloors',
+				'showHiddenReplyAvatarsByDefault',
 			],
 			this.#replyTree.read(options.readPreferences()),
 		);
@@ -269,6 +271,21 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			'未启用“完整讨论”时，从楼层列表隐藏全部二级回复；启用后先保留未读二级回复，读过后再隐藏。时间轴、跳转和已读记录不受影响；跳转时会临时显示或打开对应讨论。修改后立即保存并应用到当前帖子。';
 		hideNestedFloorsRow.hidden = true;
 		treeSection.append(hideNestedFloorsRow);
+		const showHiddenAvatarsSwitch = settingsSwitch(
+			document,
+			'默认显示隐藏楼层头像',
+			'ldp-show-hidden-reply-avatars-default',
+		);
+		this.#showHiddenAvatars = showHiddenAvatarsSwitch.input;
+		const showHiddenAvatarsRow = settingsOptionRow(
+			document,
+			'默认显示隐藏楼层头像',
+			'默认常显，最多显示 10 个头像；更多头像通过“+N”查看。三角按钮可临时收起。',
+			showHiddenAvatarsSwitch.root,
+		);
+		showHiddenAvatarsRow.dataset.settingHelp =
+			'开启后直接显示分隔线上的隐藏楼层头像，关闭后点击三角展开。悬停或触屏长按头像预览发言，直接点击进入完整讨论。预览移开后仍保留，点击空白关闭；更多头像在“+N”的竖向列表中查看。细色环区分已读、未读和未知状态。修改后立即应用到当前帖子。';
+		treeSection.append(showHiddenAvatarsRow);
 		this.#nestedWarning = element(
 			document,
 			'p',
@@ -609,6 +626,13 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			);
 			this.#afterTreeEdit();
 		});
+		this.scope.listen(this.#showHiddenAvatars, 'change', () => {
+			this.#treeDraft.set(
+				'showHiddenReplyAvatarsByDefault',
+				this.#showHiddenAvatars.checked,
+			);
+			this.#afterTreeEdit();
+		});
 		this.scope.listen(this.#mode, 'change', () => {
 			this.#boostDraft.set(
 				'mode',
@@ -710,6 +734,7 @@ export class ReaderInteractionSettingsForm<TPreferences extends object> {
 			!tree.aggregateDescendantReplies ||
 			!tree.expandNestedRepliesByDefault;
 		this.#hideNestedFloors.checked = tree.hideNestedReplyFloors;
+		this.#showHiddenAvatars.checked = tree.showHiddenReplyAvatarsByDefault;
 		this.#nestedWarning.hidden = !(
 			tree.expandNestedRepliesByDefault &&
 			tree.expandLeafNestedReplies

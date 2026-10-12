@@ -2,7 +2,7 @@
 // @name         Awesome LinuxDo Reader Lite Core Library
 // @name:zh-CN   Awesome LinuxDo Reader Lite 核心库
 // @namespace    https://github.com/sunbigfly/awesome-linuxdo-reader
-// @version      1.6.6
+// @version      1.6.7
 // @description  Core runtime and presentation modules for Awesome LinuxDo Reader Lite.
 // @description:zh-CN 应用、Shell、主题、流、布局与 userscript 运行核心
 // @author       sunbigfly
@@ -13,7 +13,7 @@
 // @grant        none
 // ==/UserScript==
 
-/* Awesome LinuxDo Reader Lite 1.6.6 - main-lite-core
+/* Awesome LinuxDo Reader Lite 1.6.7 - main-lite-core
  * 应用、Shell、主题、流、布局与 userscript 运行核心
  * 项目 TypeScript 源码保持可读；固定版本第三方依赖压缩打包。
  * 不要直接编辑此文件；修改 lite/src 后重新构建。
@@ -75,7 +75,7 @@
 
 		runtime = Object.freeze({
 			schemaVersion: 1,
-			sourceVersion: "1.6.6",
+			sourceVersion: "1.6.7",
 			register(id, factory, sourceHash) {
 				const currentHash = sourceHashes.get(id);
 				if (currentHash !== undefined) {
@@ -112,7 +112,7 @@
 			value: runtime,
 		});
 	}
-	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.6") {
+	if (runtime.schemaVersion !== 1 || runtime.sourceVersion !== "1.6.7") {
 		throw new Error('[main-lite] Library 版本不匹配');
 	}
 
@@ -2410,6 +2410,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            ...options.renderIcon ? { renderIcon: options.renderIcon } : {},
 	            controller: topicContext,
 	            replies: bundle.replies,
+	            readState: bundle.services.read,
 	            presentationChanges: topicPresentationChanges,
 	            presentation: replyTreePresentation,
 	            avatarSource: (template, size) => nativeTopicPresentation.avatarSource(template, size),
@@ -3030,6 +3031,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	            context.scope,
 	            new import_reader_topic_live_navigation_view.ReaderTopicLiveNavigationView({
 	              navigation: liveNavigation,
+	              replyAvatars: features.topicContextFeature,
 	              elements: readerTopicLiveNavigationElements(
 	                this.shell.view.root
 	              ),
@@ -4855,6 +4857,8 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	          host: settingsView.panelHost("sites"),
 	          repository: sitesFormOptions.repository,
 	          probe: coordinatedProbe,
+	          siteAccess: sitesFormOptions.siteAccess ?? null,
+	          clipboard: sitesFormOptions.clipboard ?? null,
 	          parentScope: runtime.scope
 	        });
 	      }
@@ -6334,7 +6338,7 @@ runtime.register("src/app/reader-browser-runtime.js", function(module, exports, 
 	    }
 	  });
 	}
-}, "349a3d88ef1b52be26fe6f0131096bf184cec80d8106b2a9c8e99c5443bf5398");
+}, "4dcadd0651d5759ceb28b99293e11ff294b6eaf0d6b8791a044e68968a1af52e");
 
 /* Source: lite/src/app/reader-data-runtime.ts */
 runtime.register("src/app/reader-data-runtime.js", function(module, exports, require) {
@@ -7538,6 +7542,44 @@ runtime.register("src/dom/html-element.js", function(module, exports, require) {
 	  return node.className = className, textContent !== void 0 && (node.textContent = textContent), node;
 	}
 }, "67cadf2903ac7d3c55b0e65cd9828d3b33fcc50916b623b29b38b675f72b3d09");
+
+/* Source: lite/src/dom/post-view-region.ts */
+runtime.register("src/dom/post-view-region.js", function(module, exports, require) {
+	var post_view_region_exports = {};
+	__export(post_view_region_exports, {
+	  readPostViewOwnRegion: () => readPostViewOwnRegion
+	});
+	module.exports = __toCommonJS(post_view_region_exports);
+	function readPostViewOwnRegion(target) {
+	  const targetRect = target.getBoundingClientRect();
+	  let boundary = null, height = targetRect.height;
+	  if (target.classList.contains("ldp-post")) {
+	    const candidates = [
+	      target.dataset.postNumber === "1" ? target.querySelector(
+	        ":scope > .ldp-post-body > .ldp-reactions, :scope > .ldp-reactions"
+	      ) : null,
+	      target.querySelector(":scope > .ldp-post-body"),
+	      target.querySelector(":scope > .ldp-post-head")
+	    ];
+	    for (const candidate of candidates) {
+	      if (!candidate) continue;
+	      const boundaryRect = candidate.getBoundingClientRect();
+	      if (!(boundaryRect.height <= 0 || boundaryRect.bottom <= targetRect.top)) {
+	        boundary = candidate, height = Math.min(targetRect.height, boundaryRect.bottom - targetRect.top);
+	        break;
+	      }
+	    }
+	  }
+	  return Object.freeze({
+	    boundary,
+	    rect: Object.freeze({
+	      top: targetRect.top,
+	      bottom: targetRect.top + height,
+	      height
+	    })
+	  });
+	}
+}, "5903de4c5814543648dee7e8746cdc312b90204cf64348ed7763bed8d53439ea");
 
 /* Source: lite/src/dom/post-view.ts */
 runtime.register("src/dom/post-view.js", function(module, exports, require) {
@@ -9428,15 +9470,38 @@ runtime.register("src/live/reader-topic-live-navigation-view.js", function(modul
 	  ReaderTopicLiveNavigationView: () => ReaderTopicLiveNavigationView
 	});
 	module.exports = __toCommonJS(reader_topic_live_navigation_view_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js");
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_reader_reply_avatar_interactions = require("../topic/reader-reply-avatar-interactions.js");
 	class ReaderTopicLiveNavigationView {
 	  scope;
 	  #navigation;
 	  #elements;
 	  #notify;
+	  #replyAvatars;
+	  #avatarStrip;
+	  #avatarMore;
+	  #avatarButtons = /* @__PURE__ */ new Map();
 	  constructor(options) {
-	    this.#navigation = options.navigation, this.#elements = options.elements, this.#notify = options.notify ?? (() => {
-	    }), this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.scope.listen(this.#elements.jump, "click", () => {
+	    if (this.#navigation = options.navigation, this.#elements = options.elements, this.#notify = options.notify ?? (() => {
+	    }), this.#replyAvatars = options.replyAvatars, this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), options.replyAvatars) {
+	      const document = this.#elements.root.ownerDocument, summary = document.createElement("div");
+	      summary.className = "ldp-live-reply-avatar-summary", this.#avatarStrip = document.createElement("div"), this.#avatarStrip.className = "ldp-live-reply-avatar-strip", this.#avatarStrip.setAttribute("role", "list"), this.#avatarMore = document.createElement("button"), this.#avatarMore.type = "button", this.#avatarMore.className = "ldp-btn ldp-hidden-reply-more", this.#avatarMore.setAttribute("aria-haspopup", "dialog"), summary.append(this.#avatarStrip, this.#avatarMore), this.#elements.root.insertBefore(summary, this.#elements.jump), this.#elements.root.classList.add("ldp-live-update-with-avatars"), this.#elements.jump.hidden = !0, this.scope.add((0, import_reader_reply_avatar_interactions.bindReaderReplyAvatarInteractions)(
+	        this.#avatarStrip,
+	        options.replyAvatars,
+	        this.scope,
+	        () => this.#notify("新回复暂时无法打开，请重试")
+	      )), this.scope.listen(this.#avatarMore, "click", () => {
+	        options.replyAvatars?.showReplyAvatarOverflow(
+	          this.#navigation.snapshot.pendingPostNumbers.slice(import_reader_reply_avatar_interactions.READER_REPLY_AVATAR_LIMIT),
+	          this.#avatarMore
+	        );
+	      }), this.scope.add(() => {
+	        options.replyAvatars?.dismissReplyAvatarSurfaces(this.#elements.root);
+	        for (const avatar of this.#avatarButtons.values()) options.replyAvatars?.releaseReplyAvatar(avatar);
+	        summary.remove(), this.#avatarButtons.clear(), this.#elements.root.classList.remove("ldp-live-update-with-avatars"), this.#elements.jump.hidden = !1;
+	      });
+	    } else
+	      this.#avatarStrip = null, this.#avatarMore = null;
+	    this.scope.listen(this.#elements.jump, "click", () => {
 	      this.#jump();
 	    }), this.scope.listen(this.#elements.dismiss, "click", () => {
 	      this.#navigation.dismiss();
@@ -9456,10 +9521,30 @@ runtime.register("src/live/reader-topic-live-navigation-view.js", function(modul
 	    this.#elements.root.getAttribute("aria-busy") !== busy && this.#elements.root.setAttribute("aria-busy", busy);
 	    const disabled = snapshot.jumping || hidden;
 	    this.#elements.jump.disabled !== disabled && (this.#elements.jump.disabled = disabled), this.#elements.dismiss.disabled !== disabled && (this.#elements.dismiss.disabled = disabled);
-	    const label = snapshot.pendingCount === 1 ? "查看 1 个新回复" : `查看 ${snapshot.pendingCount} 个新回复`, labelText = hidden ? "" : label;
+	    const label = snapshot.pendingCount === 1 ? "查看 1 个新回复" : `查看 ${snapshot.pendingCount} 个新回复`, labelText = hidden || this.#replyAvatars ? "" : label;
 	    this.#elements.label.textContent !== labelText && (this.#elements.label.textContent = labelText);
 	    const ariaLabel = snapshot.targetPostNumber === null ? "查看新回复" : `${label}，从楼层 #${snapshot.targetPostNumber} 开始`;
-	    this.#elements.jump.getAttribute("aria-label") !== ariaLabel && this.#elements.jump.setAttribute("aria-label", ariaLabel);
+	    this.#elements.jump.getAttribute("aria-label") !== ariaLabel && this.#elements.jump.setAttribute("aria-label", ariaLabel), this.#syncAvatars(snapshot, hidden);
+	  }
+	  #syncAvatars(snapshot, hidden) {
+	    const port = this.#replyAvatars, strip = this.#avatarStrip, more = this.#avatarMore;
+	    if (!port || !strip || !more) return;
+	    if (strip.setAttribute("aria-label", `新回复，${snapshot.pendingCount} 个楼层`), hidden) {
+	      port.dismissReplyAvatarSurfaces(this.#elements.root);
+	      for (const avatar of this.#avatarButtons.values()) port.releaseReplyAvatar(avatar);
+	      strip.replaceChildren(), this.#avatarButtons.clear(), more.hidden = !0;
+	      return;
+	    }
+	    const postNumbers = snapshot.pendingPostNumbers.slice(0, import_reader_reply_avatar_interactions.READER_REPLY_AVATAR_LIMIT), visible = new Set(postNumbers);
+	    for (const [postNumber, avatar] of this.#avatarButtons)
+	      visible.has(postNumber) || (port.dismissReplyAvatarSurfaces(avatar), port.releaseReplyAvatar(avatar), avatar.remove(), this.#avatarButtons.delete(postNumber));
+	    for (let index = 0; index < postNumbers.length; index += 1) {
+	      const postNumber = postNumbers[index];
+	      let avatar = this.#avatarButtons.get(postNumber);
+	      avatar || (avatar = port.createReplyAvatar(postNumber), avatar.setAttribute("role", "listitem"), this.#avatarButtons.set(postNumber, avatar)), avatar.disabled = snapshot.jumping, strip.children[index] !== avatar && strip.insertBefore(avatar, strip.children[index] ?? null);
+	    }
+	    const remaining = snapshot.pendingCount - postNumbers.length;
+	    more.hidden = remaining <= 0, more.disabled = snapshot.jumping, more.textContent = `+${remaining}`, more.setAttribute("aria-label", `查看其余 ${remaining} 个新楼层头像`), more.hidden ? port.dismissReplyAvatarSurfaces(more) : more.getAttribute("aria-expanded") === "true" && port.showReplyAvatarOverflow(snapshot.pendingPostNumbers.slice(import_reader_reply_avatar_interactions.READER_REPLY_AVATAR_LIMIT), more);
 	  }
 	  #jump() {
 	    this.#navigation.snapshot.jumping || this.#navigation.jumpPending().then((result) => {
@@ -9469,7 +9554,7 @@ runtime.register("src/live/reader-topic-live-navigation-view.js", function(modul
 	    });
 	  }
 	}
-}, "169a4f1c1c301e73f26e1abb3ebb6237cfe32f43074316d856f0f023a5cb4516");
+}, "02f4293e1bc1c4da1c6caf9d1372f562bb11f7ac755c01f2cc0621a67c9623e1");
 
 /* Source: lite/src/live/topic-live-controller.ts */
 runtime.register("src/live/topic-live-controller.js", function(module, exports, require) {
@@ -18941,6 +19026,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    aggregateDescendantReplies: !0,
 	    inlineReplyTreeMaxDepth: INLINE_REPLY_TREE_DEFAULT_DEPTH,
 	    hideNestedReplyFloors: !0,
+	    showHiddenReplyAvatarsByDefault: !0,
 	    jumpHighlightColor: JUMP_HIGHLIGHT_DEFAULTS.color,
 	    jumpHighlightRadius: JUMP_HIGHLIGHT_DEFAULTS.radius,
 	    jumpHighlightBorderWidth: JUMP_HIGHLIGHT_DEFAULTS.borderWidth,
@@ -19119,6 +19205,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	      Math.max(1, depth || INLINE_REPLY_TREE_DEFAULT_DEPTH)
 	    ),
 	    hideNestedReplyFloors: source.hideNestedReplyFloors === !0,
+	    showHiddenReplyAvatarsByDefault: source.showHiddenReplyAvatarsByDefault !== !1,
 	    jumpHighlightColor: /^#[0-9a-f]{6}$/.test(jumpColor) ? jumpColor : JUMP_HIGHLIGHT_DEFAULTS.color,
 	    jumpHighlightRadius: normalizeJumpValue("radius", source.jumpHighlightRadius),
 	    jumpHighlightBorderWidth: normalizeJumpValue(
@@ -19215,7 +19302,7 @@ runtime.register("src/state/reader-preferences-schema.js", function(module, expo
 	    prepareStored: prepareStoredReaderPreferences
 	  });
 	}
-}, "fee25a799df28ae7f4f28adc7e6d2097205276eb61764361b1731670931a310e");
+}, "365f6f4afe47b26316a8840ce806f1141a79d24ea20fb64d1450055b5315598d");
 
 /* Source: lite/src/state/reader-settings-config-manager.ts */
 runtime.register("src/state/reader-settings-config-manager.js", function(module, exports, require) {
@@ -21100,6 +21187,256 @@ runtime.register("src/topic/reader-reply-ancestor-resolver.js", function(module,
 	}
 }, "0e9a00d23cc3baf9951c000c767973a28696998cd9581061a576aa3590528d4e");
 
+/* Source: lite/src/topic/reader-reply-avatar-interactions.ts */
+runtime.register("src/topic/reader-reply-avatar-interactions.js", function(module, exports, require) {
+	var reader_reply_avatar_interactions_exports = {};
+	__export(reader_reply_avatar_interactions_exports, {
+	  READER_REPLY_AVATAR_LIMIT: () => READER_REPLY_AVATAR_LIMIT,
+	  bindReaderReplyAvatarInteractions: () => bindReaderReplyAvatarInteractions
+	});
+	module.exports = __toCommonJS(reader_reply_avatar_interactions_exports);
+	var import_event_target = require("../dom/event-target.js");
+	const READER_REPLY_AVATAR_LIMIT = 10;
+	function bindReaderReplyAvatarInteractions(root, port, parentScope, onError = () => {
+	}) {
+	  const scope = parentScope.child();
+	  let lastTouchAt = -1 / 0, pressScope = null, blockedClick = null;
+	  const avatarOf = (event) => {
+	    const avatar = (0, import_event_target.eventElement)(event)?.closest(
+	      "[data-reader-context-hidden-post]"
+	    );
+	    return avatar && root.contains(avatar) ? avatar : null;
+	  }, preview = (avatar) => {
+	    port.previewReplyAvatar(
+	      Number(avatar.dataset.readerContextHiddenPost),
+	      avatar
+	    );
+	  };
+	  return scope.listen(root, "mouseover", (event) => {
+	    if (Date.now() - lastTouchAt < 1e3) return;
+	    const avatar = avatarOf(event), related = event.relatedTarget;
+	    avatar && (!related || !avatar.contains(related)) && preview(avatar);
+	  }), scope.listen(root, "focusin", (event) => {
+	    const avatar = avatarOf(event);
+	    avatar && Date.now() - lastTouchAt >= 1e3 && preview(avatar);
+	  }), scope.listen(root, "pointerdown", (event) => {
+	    pressScope?.destroy(), pressScope = null, blockedClick = null;
+	    const pointer = event;
+	    if (pointer.pointerType !== "touch" && pointer.pointerType !== "pen") return;
+	    lastTouchAt = Date.now();
+	    const avatar = avatarOf(event);
+	    if (!avatar) return;
+	    const active = scope.child();
+	    pressScope = active;
+	    let held = !1;
+	    const timer = setTimeout(() => {
+	      active.destroyed || !avatar.isConnected || (held = !0, preview(avatar));
+	    }, 350);
+	    active.add(() => {
+	      clearTimeout(timer), pressScope === active && (pressScope = null);
+	    });
+	    const target = root.getRootNode();
+	    active.listen(target, "pointermove", (move) => {
+	      const next = move;
+	      next.pointerId === pointer.pointerId && Math.hypot(
+	        next.clientX - pointer.clientX,
+	        next.clientY - pointer.clientY
+	      ) > 10 && active.destroy();
+	    }, !0), active.listen(target, "pointerup", (up) => {
+	      up.pointerId === pointer.pointerId && (held && (blockedClick = avatar, up.preventDefault()), active.destroy());
+	    }, !0), active.listen(target, "pointercancel", () => active.destroy(), !0);
+	  }), scope.listen(root, "contextmenu", (event) => {
+	    const avatar = avatarOf(event);
+	    !avatar || Date.now() - lastTouchAt >= 1e3 || (event.preventDefault(), blockedClick = avatar, preview(avatar));
+	  }), scope.listen(root, "click", (event) => {
+	    const avatar = avatarOf(event);
+	    if (avatar) {
+	      if (event.preventDefault(), event.stopImmediatePropagation(), blockedClick === avatar) {
+	        blockedClick = null;
+	        return;
+	      }
+	      port.openReplyDiscussion(
+	        Number(avatar.dataset.readerContextHiddenPost)
+	      ).catch((error) => {
+	        scope.destroyed || onError(error);
+	      });
+	    }
+	  }), scope.add(() => {
+	    port.dismissReplyAvatarSurfaces(root), root.querySelectorAll("[data-reader-context-hidden-post]").forEach((avatar) => port.releaseReplyAvatar(avatar));
+	  }), () => scope.destroy();
+	}
+}, "9fe4729203d13116e12611ccaae890690342244f4e34e61ff37a012b49439697");
+
+/* Source: lite/src/topic/reader-reply-avatar-surface.ts */
+runtime.register("src/topic/reader-reply-avatar-surface.js", function(module, exports, require) {
+	var reader_reply_avatar_surface_exports = {};
+	__export(reader_reply_avatar_surface_exports, {
+	  ReaderReplyAvatarSurface: () => ReaderReplyAvatarSurface
+	});
+	module.exports = __toCommonJS(reader_reply_avatar_surface_exports);
+	var import_event_target = require("../dom/event-target.js"), import_floating_surface_wheel = require("../dom/floating-surface-wheel.js"), import_html_element = require("../dom/html-element.js"), import_reader_reply_avatar_interactions = require("./reader-reply-avatar-interactions.js");
+	class ReaderReplyAvatarSurface {
+	  scope;
+	  #options;
+	  #loads = /* @__PURE__ */ new Map();
+	  #preview = null;
+	  #overflow = null;
+	  constructor(options) {
+	    this.#options = options, this.scope = options.parentScope.child(), options.controller.changes.subscribe(() => {
+	      const active = this.#preview;
+	      if (!active) return;
+	      const post = options.controller.postByNumber(active.postNumber);
+	      post && post !== active.post && this.#renderPreview(active, post);
+	    }, this.scope), this.scope.add(() => {
+	      this.#closeOverflow(), this.#closePreview(), this.#loads.clear();
+	    });
+	  }
+	  preview(postNumber, anchor, host) {
+	    if (this.scope.destroyed || !anchor.isConnected) return;
+	    if (this.#preview?.anchor === anchor && this.#preview.postNumber === postNumber) {
+	      this.#position(this.#preview);
+	      return;
+	    }
+	    this.#closePreview();
+	    const scope = this.scope.child(), root = this.#surface(host, anchor, "ldp-hidden-reply-preview", scope);
+	    root.setAttribute("role", "dialog"), root.setAttribute("aria-label", `楼层 #${postNumber} 的发言预览`);
+	    const body = (0, import_html_element.htmlElement)(this.#options.document, "div", "ldp-reply-avatar-preview-body"), complete = (0, import_html_element.htmlElement)(this.#options.document, "button", "ldp-btn ldp-reply-avatar-complete");
+	    complete.type = "button", complete.textContent = `查看完整讨论 · #${postNumber}`, complete.dataset.readerReplyAvatarComplete = String(postNumber), root.append(body, complete);
+	    const active = { scope, root, anchor, postNumber, body, post: null, view: null };
+	    this.#preview = active, scope.listen(complete, "click", (event) => {
+	      event.preventDefault(), this.#options.avatars.openReplyDiscussion(postNumber).catch(this.#options.onError);
+	    }), scope.add(() => {
+	      active.view && (this.#options.projector.detach(active.view.slots.root, postNumber), active.view.destroy(), active.view = null);
+	    });
+	    const post = this.#options.controller.postByNumber(postNumber);
+	    if (post) {
+	      this.#renderPreview(active, post);
+	      return;
+	    }
+	    body.textContent = `正在加载楼层 #${postNumber}…`, root.setAttribute("aria-busy", "true"), this.#position(active);
+	    let load = this.#loads.get(postNumber);
+	    load || (load = this.#options.controller.loadQuotedPost(this.#options.controller.topicId, postNumber), this.#loads.set(postNumber, load), load.finally(() => this.#loads.delete(postNumber)).catch(() => {
+	    })), load.then((loaded) => {
+	      active.scope.destroyed || this.#preview !== active || (root.removeAttribute("aria-busy"), loaded ? this.#renderPreview(active, loaded) : body.textContent = `楼层 #${postNumber} 暂不可访问`, this.#position(active));
+	    }).catch((error) => {
+	      active.scope.destroyed || this.#options.onError(error);
+	    });
+	  }
+	  overflow(postNumbers, anchor, host) {
+	    if (this.scope.destroyed || !anchor.isConnected || !postNumbers.length) return;
+	    if (this.#overflow?.anchor === anchor) {
+	      this.#overflow.postNumbers = postNumbers, this.#renderOverflow(this.#overflow);
+	      return;
+	    }
+	    this.#closeOverflow();
+	    const scope = this.scope.child(), root = this.#surface(host, anchor, "ldp-reply-avatar-overflow", scope);
+	    root.setAttribute("role", "dialog"), root.setAttribute("aria-label", "更多楼层头像");
+	    const list = (0, import_html_element.htmlElement)(this.#options.document, "div", "ldp-reply-avatar-overflow-list");
+	    list.setAttribute("role", "list"), list.tabIndex = 0;
+	    const top = (0, import_html_element.htmlElement)(this.#options.document, "div", "ldp-reply-avatar-spacer"), bottom = (0, import_html_element.htmlElement)(this.#options.document, "div", "ldp-reply-avatar-spacer");
+	    top.setAttribute("aria-hidden", "true"), bottom.setAttribute("aria-hidden", "true"), list.append(top, bottom), root.append(list);
+	    const active = { scope, root, anchor, list, top, bottom, rows: /* @__PURE__ */ new Map(), postNumbers };
+	    this.#overflow = active, scope.add((0, import_reader_reply_avatar_interactions.bindReaderReplyAvatarInteractions)(list, this.#options.avatars, scope, this.#options.onError)), scope.listen(list, "scroll", () => this.#renderOverflow(active, !1), { passive: !0 }), this.#renderOverflow(active);
+	  }
+	  dismissPreview() {
+	    this.#closePreview();
+	  }
+	  dismissFor(container) {
+	    this.#overflow && container.contains(this.#overflow.anchor) && this.#closeOverflow(), this.#preview && container.contains(this.#preview.anchor) && this.#closePreview();
+	  }
+	  #surface(host, anchor, className, scope) {
+	    const root = (0, import_html_element.htmlElement)(this.#options.document, "section", `${className} ldp-action-surface`);
+	    host.append(root), anchor.setAttribute("aria-expanded", "true");
+	    const boundary = host.getRootNode();
+	    scope.listen(boundary, "click", (event) => {
+	      (0, import_event_target.eventPathIncludes)(event, root) || (0, import_event_target.eventPathIncludes)(event, anchor) || (0, import_event_target.eventPathIncludes)(event, this.#preview?.root ?? null) || (0, import_event_target.eventPathIncludes)(event, this.#overflow?.root ?? null) || (0, import_event_target.eventElement)(event)?.closest('a,button,input,select,textarea,[role="button"],[contenteditable="true"]') || (this.#preview?.root === root ? this.#closePreview() : this.#overflow?.root === root && this.#closeOverflow());
+	    }, !0);
+	    const position = () => {
+	      const active = this.#preview?.root === root ? this.#preview : this.#overflow?.root === root ? this.#overflow : null;
+	      active && this.#position(active);
+	    }, viewport = this.#options.document.defaultView, requestFrame = this.#options.requestFrame ?? viewport?.requestAnimationFrame?.bind(viewport), cancelFrame = this.#options.cancelFrame ?? viewport?.cancelAnimationFrame?.bind(viewport);
+	    let frame = null;
+	    const schedule = () => {
+	      if (frame !== null || scope.destroyed) return;
+	      if (!requestFrame) {
+	        position();
+	        return;
+	      }
+	      let completed = !1;
+	      const handle = requestFrame(() => {
+	        completed = !0, frame = null, scope.destroyed || position();
+	      });
+	      completed || (frame = handle);
+	    };
+	    scope.listen(boundary, "scroll", schedule, { capture: !0, passive: !0 }), viewport && scope.listen(viewport, "resize", schedule);
+	    for (const type of ["ldp-reader-window-change", "ldp-reader-workspace-change"])
+	      scope.listen(host, type, schedule);
+	    const Observer = viewport?.ResizeObserver;
+	    if (Observer) {
+	      const observer = new Observer(schedule);
+	      observer.observe(root), observer.observe(anchor), scope.add(() => observer.disconnect());
+	    }
+	    return scope.add((0, import_floating_surface_wheel.bindFloatingSurfaceWheel)(root)), scope.add(() => {
+	      frame !== null && cancelFrame?.(frame), anchor.setAttribute("aria-expanded", "false"), root.remove();
+	    }), root;
+	  }
+	  #position(active) {
+	    if (active.scope.destroyed) return;
+	    if (!active.anchor.isConnected) {
+	      this.#preview === active ? this.#closePreview() : this.#overflow === active && this.#closeOverflow();
+	      return;
+	    }
+	    const viewport = this.#options.readViewport(), anchor = active.anchor.getBoundingClientRect(), margin = 12, gap = 10, above = Math.max(0, anchor.top - margin - gap), below = Math.max(0, viewport.height - anchor.bottom - margin - gap);
+	    active.root.style.maxHeight = `${Math.max(1, Math.min(500, Math.max(above, below)))}px`;
+	    const rect = active.root.getBoundingClientRect(), placeAbove = rect.height <= above || rect.height > below && above >= below, left = Math.max(margin, Math.min(
+	      viewport.width - rect.width - margin,
+	      anchor.left + anchor.width / 2 - rect.width / 2
+	    )), top = Math.max(margin, Math.min(
+	      viewport.height - rect.height - margin,
+	      placeAbove ? anchor.top - rect.height - gap : anchor.bottom + gap
+	    ));
+	    active.root.style.left = `${Math.round(left)}px`, active.root.style.top = `${Math.round(top)}px`, active.root.dataset.placement = placeAbove ? "top" : "bottom", active.root.style.setProperty("--ldp-avatar-arrow-x", `${Math.round(Math.max(16, Math.min(rect.width - 16, anchor.left + anchor.width / 2 - left)))}px`);
+	  }
+	  #renderPreview(active, post) {
+	    active.scope.destroyed || this.#preview !== active || (active.view ? this.#options.projector.render(post, active.view) : (active.body.replaceChildren(), active.view = this.#options.projector.createShell(post, active.scope, active.postNumber), active.body.append(active.view.slots.root), this.#options.projector.render(post, active.view), this.#options.projector.attach(active.view.slots.root, active.postNumber)), active.post = post, active.root.removeAttribute("aria-busy"), this.#position(active));
+	  }
+	  #renderOverflow(active, position = !0) {
+	    if (active.scope.destroyed) return;
+	    const rowHeight = 48, height = Math.min(240, Math.max(48, this.#options.readViewport().height * 0.45));
+	    active.list.style.height = `${height}px`;
+	    const count = Math.ceil(height / rowHeight) + 4, first = Math.min(
+	      Math.max(0, active.postNumbers.length - count),
+	      Math.max(0, Math.floor((active.list.scrollTop || 0) / rowHeight) - 2)
+	    ), end = Math.min(active.postNumbers.length, first + count), visible = new Set(active.postNumbers.slice(first, end));
+	    for (const [postNumber, row] of active.rows)
+	      visible.has(postNumber) || (this.dismissFor(row), row.querySelectorAll("[data-reader-context-hidden-post]").forEach((avatar) => this.#options.avatars.releaseReplyAvatar(avatar)), row.remove(), active.rows.delete(postNumber));
+	    active.top.style.height = `${first * rowHeight}px`, active.bottom.style.height = `${(active.postNumbers.length - end) * rowHeight}px`;
+	    let previous = active.top;
+	    for (let index = first; index < end; index += 1) {
+	      const postNumber = active.postNumbers[index];
+	      let row = active.rows.get(postNumber);
+	      if (!row) {
+	        row = (0, import_html_element.htmlElement)(this.#options.document, "div", "ldp-reply-avatar-overflow-row"), row.setAttribute("role", "listitem");
+	        const avatar = this.#options.avatars.createReplyAvatar(postNumber), label = (0, import_html_element.htmlElement)(this.#options.document, "span", "ldp-reply-avatar-overflow-name");
+	        label.textContent = avatar.dataset.readerReplyAvatarName || `#${postNumber}`;
+	        const floor = (0, import_html_element.htmlElement)(this.#options.document, "span", "ldp-floor");
+	        floor.textContent = `#${postNumber}`, row.append(avatar, label, floor), active.rows.set(postNumber, row);
+	      }
+	      previous.nextElementSibling !== row && previous.after(row), previous = row;
+	    }
+	    position && this.#position(active);
+	  }
+	  #closePreview() {
+	    const active = this.#preview;
+	    this.#preview = null, active?.scope.destroy();
+	  }
+	  #closeOverflow() {
+	    const active = this.#overflow;
+	    this.#overflow = null, active && this.dismissFor(active.root), active?.scope.destroy();
+	  }
+	}
+}, "caa42b71c5d3485927f62fdacc1fc9743213600804e64a3b43a60be558b9e333");
+
 /* Source: lite/src/topic/reader-reply-tree-preferences.ts */
 runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, exports, require) {
 	var reader_reply_tree_preferences_exports = {};
@@ -21117,7 +21454,8 @@ runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, 
 	  expandLeafNestedReplies: !1,
 	  aggregateDescendantReplies: !0,
 	  inlineReplyTreeMaxDepth: 3,
-	  hideNestedReplyFloors: !0
+	  hideNestedReplyFloors: !0,
+	  showHiddenReplyAvatarsByDefault: !0
 	});
 	function normalizeReaderReplyTreePreferences(value) {
 	  const expandLeafNestedReplies = value.expandLeafNestedReplies === !0, aggregateDescendantReplies = value.aggregateDescendantReplies === !0, expandNestedRepliesByDefault = aggregateDescendantReplies || value.expandNestedRepliesByDefault !== !1 || !expandLeafNestedReplies, rawDepth = Number(value.inlineReplyTreeMaxDepth);
@@ -21126,7 +21464,8 @@ runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, 
 	    expandLeafNestedReplies,
 	    aggregateDescendantReplies: expandNestedRepliesByDefault && aggregateDescendantReplies,
 	    inlineReplyTreeMaxDepth: Number.isFinite(rawDepth) ? Math.min(5, Math.max(1, Math.trunc(rawDepth))) : DEFAULT_READER_REPLY_TREE_PREFERENCES.inlineReplyTreeMaxDepth,
-	    hideNestedReplyFloors: value.hideNestedReplyFloors === !0
+	    hideNestedReplyFloors: value.hideNestedReplyFloors === !0,
+	    showHiddenReplyAvatarsByDefault: value.showHiddenReplyAvatarsByDefault !== !1
 	  });
 	}
 	class ReaderReplyTreePreferencesPreview {
@@ -21192,6 +21531,9 @@ runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, 
 	  get preferences() {
 	    return this.#preferences;
 	  }
+	  get showHiddenReplyAvatarsByDefault() {
+	    return this.#preferences.showHiddenReplyAvatarsByDefault;
+	  }
 	  get revision() {
 	    return `${this.#activeCanonicalRevision()}:${Number(this.#activeCanonicalCoverageComplete())}:${this.#activeCanonicalPostStreamRevision()}:${this.#projectionRevision}`;
 	  }
@@ -21225,7 +21567,11 @@ runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, 
 	  }
 	  update(preferences) {
 	    const next = normalizeReaderReplyTreePreferences(preferences), changed = Object.keys(next).some((name) => !Object.is(next[name], this.#preferences[name]));
-	    return changed && (this.#preferences = next, this.#revealedFloors.clear(), this.#revealedParents.clear(), this.#degradedFloorRoots.clear(), this.#degradedFloorCanonicalRevision = -1, this.#projectionRevision += 1), changed;
+	    if (changed) {
+	      const projectionChanged = Object.keys(next).some((name) => name !== "showHiddenReplyAvatarsByDefault" && !Object.is(next[name], this.#preferences[name]));
+	      this.#preferences = next, projectionChanged && (this.#revealedFloors.clear(), this.#revealedParents.clear(), this.#degradedFloorRoots.clear(), this.#degradedFloorCanonicalRevision = -1, this.#projectionRevision += 1);
+	    }
+	    return changed;
 	  }
 	  setPostFilter(filter) {
 	    const nextKey = filter?.key ?? "", currentKey = this.#postFilter?.key ?? "";
@@ -21461,7 +21807,7 @@ runtime.register("src/topic/reader-reply-tree-preferences.js", function(module, 
 	    return !0;
 	  }
 	}
-}, "3a7c25e5877aee489ff7dab29ad1d03825ba400a54f95167c3a96a5b026049c0");
+}, "c4b69cd70a313965423909a57ebc872f324028dcfcece6958a5564178d05701c");
 
 /* Source: lite/src/topic/reader-topic-comments-header.ts */
 runtime.register("src/topic/reader-topic-comments-header.js", function(module, exports, require) {
@@ -22059,12 +22405,12 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	  ReaderTopicContextSurface: () => ReaderTopicContextSurface
 	});
 	module.exports = __toCommonJS(reader_topic_context_surface_exports);
-	var import_identifiers = require("../discourse/identifiers.js"), import_event_target = require("../dom/event-target.js"), import_floating_surface_wheel = require("../dom/floating-surface-wheel.js"), import_html_element = require("../dom/html-element.js"), import_reply_tree_dom_owner = require("../dom/reply-tree-dom-owner.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_icon = require("../components/reader-icon.js"), import_branch_overlay = require("../layout/branch-overlay.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_post_view_projector = require("./reader-post-view-projector.js"), import_reader_topic_context_state = require("./reader-topic-context-state.js");
+	var import_identifiers = require("../discourse/identifiers.js"), import_event_target = require("../dom/event-target.js"), import_floating_surface_wheel = require("../dom/floating-surface-wheel.js"), import_html_element = require("../dom/html-element.js"), import_post_view_region = require("../dom/post-view-region.js"), import_reply_tree_dom_owner = require("../dom/reply-tree-dom-owner.js"), import_lifecycle = require("../kernel/lifecycle.js"), import_reader_icon = require("../components/reader-icon.js"), import_branch_overlay = require("../layout/branch-overlay.js"), import_reader_workspace = require("../shell/reader-workspace.js"), import_reader_escape_surface = require("../shell/reader-escape-surface.js"), import_reader_post_view_projector = require("./reader-post-view-projector.js"), import_reader_topic_context_state = require("./reader-topic-context-state.js"), import_reader_reply_avatar_interactions = require("./reader-reply-avatar-interactions.js"), import_reader_reply_avatar_surface = require("./reader-reply-avatar-surface.js");
 	function button(document, className, label, text = "") {
 	  const value = (0, import_html_element.htmlElement)(document, "button", className);
 	  return value.type = "button", value.setAttribute("aria-label", label), value.textContent = text, value;
 	}
-	const HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE = 100, QUOTE_HINT_POINTER_GAP_PX = 4, QUOTE_HINT_HIDE_GRACE_MS = 480;
+	const QUOTE_HINT_POINTER_GAP_PX = 4, QUOTE_HINT_HIDE_GRACE_MS = 480;
 	function postCooked(post) {
 	  return String(
 	    post.cooked ?? ""
@@ -22154,13 +22500,18 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	  #rootCleanups = /* @__PURE__ */ new WeakMap();
 	  #viewByRoot = /* @__PURE__ */ new WeakMap();
 	  #hiddenReplyMarkers = /* @__PURE__ */ new Map();
+	  #hiddenReplyMarkerScopes = /* @__PURE__ */ new WeakMap();
 	  #hiddenReplyPostNumbers = /* @__PURE__ */ new WeakMap();
+	  #replyAvatars = /* @__PURE__ */ new Map();
+	  #openedReplyPostNumbers = /* @__PURE__ */ new Set();
+	  #readState;
 	  #rootsByPostNumber = /* @__PURE__ */ new Map();
 	  #collapsedRootReplies = /* @__PURE__ */ new Set();
 	  #quoteJumpExcerptByElement = /* @__PURE__ */ new WeakMap();
 	  #quotePostLoads = /* @__PURE__ */ new Map();
 	  #expandedQuoteKeys = /* @__PURE__ */ new Set();
 	  #quoteSourcePort = null;
+	  #replyAvatarSurface = null;
 	  #quoteHighlight = null;
 	  #quoteHighlightMarks = Object.freeze([]);
 	  #quoteHighlightHint = null;
@@ -22169,7 +22520,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	  #quotePositionEpoch = 0;
 	  #quoteJumpEpoch = 0;
 	  constructor(options) {
-	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#controller = options.controller, this.#replies = options.replies, this.#presentation = options.presentation, this.#scrollRoot = options.scrollRoot, this.#navigate = options.navigate, this.#target = options.target, this.#avatarSource = options.avatarSource, this.#renderIcon = options.renderIcon, this.#onQuoteBodyChanged = options.onQuoteBodyChanged, this.#onRevealNextReplyLevel = options.onRevealNextReplyLevel, this.#revealQuoteTarget = options.revealQuoteTarget, this.#navigationRetryDelay = options.navigationRetryDelay ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs))), this.#quoteHintHost = options.quoteHintHost ?? options.document.body ?? options.document.documentElement, this.#notify = options.notify ?? (() => {
+	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#controller = options.controller, this.#replies = options.replies, this.#presentation = options.presentation, this.#scrollRoot = options.scrollRoot, this.#navigate = options.navigate, this.#target = options.target, this.#avatarSource = options.avatarSource, this.#readState = options.readState, this.#renderIcon = options.renderIcon, this.#onQuoteBodyChanged = options.onQuoteBodyChanged, this.#onRevealNextReplyLevel = options.onRevealNextReplyLevel, this.#revealQuoteTarget = options.revealQuoteTarget, this.#navigationRetryDelay = options.navigationRetryDelay ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs))), this.#quoteHintHost = options.quoteHintHost ?? options.document.body ?? options.document.documentElement, this.#notify = options.notify ?? (() => {
 	    }), this.#onError = options.onError ?? (() => {
 	    });
 	    for (const type of [
@@ -22184,11 +22535,18 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    (options.presentationChanges ?? this.#replies.changes).subscribe(() => {
 	      for (const roots of this.#rootsByPostNumber.values())
 	        for (const root of roots) this.#syncMountedTree(root);
+	      for (const postNumber of this.#replyAvatars.keys()) this.#syncAvatarReadState(postNumber);
+	    }, this.scope), options.readState?.changes.subscribe((change) => {
+	      if (change.kind === "confirmed")
+	        for (const postNumber of change.postNumbers) this.#syncAvatarReadState(postNumber);
+	    }, this.scope), options.controller.changes.subscribe((snapshot) => {
+	      const discussion = snapshot.discussion, target = discussion?.targetPostNumber;
+	      target == null || this.#openedReplyPostNumbers.has(target) || !discussion?.entries.some((entry) => entry.postNumber === target) || (this.#openedReplyPostNumbers.add(target), this.#syncAvatarReadState(target));
 	    }, this.scope), this.scope.add(() => {
 	      this.#quoteJumpEpoch += 1, this.#quotePositionEpoch += 1, this.#scrollRoot.classList.remove("ldp-quote-positioning");
 	      for (const roots of this.#rootsByPostNumber.values())
 	        for (const root of roots) this.#rootCleanups.get(root)?.();
-	      this.#rootsByPostNumber.clear(), this.#collapsedRootReplies.clear(), this.#quotePostLoads.clear(), this.#expandedQuoteKeys.clear(), this.#clearQuoteHighlight();
+	      this.#rootsByPostNumber.clear(), this.#collapsedRootReplies.clear(), this.#quotePostLoads.clear(), this.#expandedQuoteKeys.clear(), this.#replyAvatars.clear(), this.#openedReplyPostNumbers.clear(), this.#clearQuoteHighlight();
 	    });
 	  }
 	  afterRender(post, view) {
@@ -22267,6 +22625,58 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      candidate.postNumber,
 	      !0
 	    ), candidate.postNumber) : null;
+	  }
+	  connectReplyAvatarSurface(port) {
+	    if (this.#replyAvatarSurface && this.#replyAvatarSurface !== port)
+	      throw new Error("楼层头像浮窗只能连接一个 owner");
+	    return this.#replyAvatarSurface = port, this.scope.add(() => {
+	      this.#replyAvatarSurface === port && (this.#replyAvatarSurface = null);
+	    });
+	  }
+	  createReplyAvatar(postNumber) {
+	    const identity = this.#controller.postByNumber(postNumber), username = String(identity?.username ?? "").trim(), displayName = String(identity?.name ?? "").trim() || username || `#${postNumber}`, avatar = button(
+	      this.#document,
+	      "ldp-hidden-reply-avatar",
+	      `在完整讨论中查看 ${displayName} 的回复 #${postNumber}`
+	    );
+	    avatar.dataset.readerContextHiddenPost = String(postNumber), avatar.dataset.readerReplyAvatarName = displayName, avatar.dataset.tooltip = "", avatar.setAttribute("aria-haspopup", "dialog");
+	    const avatars = this.#replyAvatars.get(postNumber) ?? /* @__PURE__ */ new Set();
+	    avatars.add(avatar), this.#replyAvatars.set(postNumber, avatars);
+	    const source = this.#avatarSource?.(String(identity?.avatar_template ?? ""), 32) ?? "";
+	    if (source) {
+	      const image = this.#document.createElement("img");
+	      image.src = source, image.alt = "", image.loading = "lazy", image.decoding = "async", avatar.append(image);
+	    } else
+	      avatar.textContent = [...displayName][0] ?? "?";
+	    const readMark = (0, import_html_element.htmlElement)(this.#document, "span", "ldp-reply-avatar-read-mark");
+	    return readMark.setAttribute("aria-hidden", "true"), readMark.append((0, import_reader_icon.renderReaderIcon)(this.#document, "check")), avatar.append(readMark), this.#syncAvatarReadState(postNumber), avatar;
+	  }
+	  releaseReplyAvatar(avatar) {
+	    const postNumber = Number(avatar.dataset.readerContextHiddenPost), avatars = this.#replyAvatars.get(postNumber);
+	    avatars?.delete(avatar), avatars?.size === 0 && this.#replyAvatars.delete(postNumber);
+	  }
+	  #syncAvatarReadState(postNumber) {
+	    const avatars = this.#replyAvatars.get(postNumber);
+	    if (!avatars) return;
+	    const post = this.#controller.postByNumber(postNumber), state = this.#openedReplyPostNumbers.has(postNumber) || post?.read === !0 || this.#readState?.isConfirmed(postNumber) ? "read" : post?.read === !1 ? "unread" : "unknown", label = state === "read" ? "已读" : state === "unread" ? "未读" : "已读状态未知";
+	    for (const avatar of avatars) {
+	      if (avatar.dataset.readState === state) continue;
+	      avatar.dataset.readState = state;
+	      const readMark = avatar.querySelector(".ldp-reply-avatar-read-mark");
+	      readMark && (readMark.hidden = state !== "read"), avatar.setAttribute("aria-label", `在完整讨论中查看 ${avatar.dataset.readerReplyAvatarName} 的回复 #${postNumber}，${label}`);
+	    }
+	  }
+	  previewReplyAvatar(postNumber, anchor) {
+	    this.#replyAvatarSurface?.preview(postNumber, anchor, this.#quoteHintHost);
+	  }
+	  async openReplyDiscussion(postNumber) {
+	    this.#replyAvatarSurface?.dismissPreview(), await this.#controller.openDiscussion((0, import_identifiers.discoursePostNumber)(postNumber));
+	  }
+	  showReplyAvatarOverflow(postNumbers, anchor) {
+	    this.#replyAvatarSurface?.overflow(postNumbers, anchor, this.#quoteHintHost);
+	  }
+	  dismissReplyAvatarSurfaces(container) {
+	    this.#replyAvatarSurface?.dismissFor(container);
 	  }
 	  connectQuoteSource(port) {
 	    if (this.scope.destroyed)
@@ -22441,7 +22851,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      const floor = (0, import_html_element.htmlElement)(this.#document, "span", "ldp-floor ldp-body-floor");
 	      floor.textContent = `#${postNumber}`, currentFloor.replaceWith(floor);
 	    }
-	    const insideDiscussion = !!root.closest(".ldp-descendant-replies-layer"), hiddenDirectChildren = insideDiscussion ? Object.freeze([]) : this.#presentation?.hiddenDirectChildrenOf(postNumber) ?? Object.freeze([]);
+	    const insideDiscussion = !!root.closest(".ldp-descendant-replies-layer,.ldp-hidden-reply-preview"), hiddenDirectChildren = insideDiscussion ? Object.freeze([]) : this.#presentation?.hiddenDirectChildrenOf(postNumber) ?? Object.freeze([]);
 	    if (replyControls && hiddenDirectChildren.length > 0) {
 	      root.classList.add("ldp-has-hidden-child-branches");
 	      const controls = (0, import_html_element.htmlElement)(
@@ -22480,7 +22890,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    }
 	  }
 	  #syncRootReplyCollapse(root, postNumber, post) {
-	    const canonicalParent = this.#replies.topology.parentOf(postNumber), projectedParent = this.#presentation?.parentOf(postNumber), canonicalReply = post !== null && canonicalParent !== void 0 && canonicalParent !== null, canonicalLeafReply = canonicalReply && postReplyCount(post) === 0 && this.#replies.topology.childrenOf(postNumber).length === 0, nestedPreview = root.classList.contains("ldp-nested-preview"), streamReply = canonicalReply && !this.#isOnlyOpPost(postNumber) && !root.closest(".ldp-descendant-replies-layer") && (projectedParent === null || nestedPreview), collapseControlVisible = streamReply && projectedParent === null && !nestedPreview, previousToggle = root.querySelector(
+	    const canonicalParent = this.#replies.topology.parentOf(postNumber), projectedParent = this.#presentation?.parentOf(postNumber), canonicalReply = post !== null && canonicalParent !== void 0 && canonicalParent !== null, canonicalLeafReply = canonicalReply && postReplyCount(post) === 0 && this.#replies.topology.childrenOf(postNumber).length === 0, nestedPreview = root.classList.contains("ldp-nested-preview"), streamReply = canonicalReply && !this.#isOnlyOpPost(postNumber) && !root.closest(".ldp-descendant-replies-layer,.ldp-hidden-reply-preview") && (projectedParent === null || nestedPreview), collapseControlVisible = streamReply && projectedParent === null && !nestedPreview, previousToggle = root.querySelector(
 	      ":scope > [data-reader-context-collapse-reply]"
 	    ), previousHint = root.querySelector(
 	      ":scope > .ldp-nested-esc-hint"
@@ -22595,7 +23005,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	        postRoot,
 	        postNumber,
 	        post
-	      ), !postRoot.closest(".ldp-descendant-replies-layer") && this.#syncHiddenReplyMarker(postRoot, postNumber);
+	      ), !postRoot.closest(".ldp-descendant-replies-layer,.ldp-hidden-reply-preview") && this.#syncHiddenReplyMarker(postRoot, postNumber);
 	    }
 	  }
 	  #syncHiddenReplyMarker(root, postNumber) {
@@ -22608,20 +23018,19 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      this.#removeHiddenReplyMarker(root);
 	      return;
 	    }
-	    if (previous && this.#hiddenReplyPostNumbers.get(previous) === hiddenPostNumbers) {
+	    const defaultExpanded = this.#presentation?.showHiddenReplyAvatarsByDefault !== !1;
+	    if (previous && this.#hiddenReplyPostNumbers.get(previous) === hiddenPostNumbers && previous.dataset.readerContextHiddenDefaultExpanded === String(defaultExpanded)) {
 	      root.classList.add("ldp-before-hidden-reply-marker"), previous.previousElementSibling !== root && root.after(previous);
 	      return;
 	    }
-	    const expanded = previous?.querySelector(
-	      "[data-reader-context-hidden-list]"
-	    )?.hidden === !1;
+	    const expanded = previous?.dataset.readerContextHiddenDefaultExpanded === String(defaultExpanded) ? previous.querySelector("[data-reader-context-hidden-list]")?.hidden === !1 : defaultExpanded;
 	    this.#removeHiddenReplyMarker(root);
 	    const marker = (0, import_html_element.htmlElement)(
 	      this.#document,
 	      "div",
 	      "ldp-hidden-reply-marker"
 	    );
-	    marker.dataset.readerContextHiddenReplies = "1", marker.dataset.readerContextHiddenPostNumbers = [
+	    marker.dataset.readerContextHiddenReplies = "1", marker.setAttribute("role", "group"), marker.setAttribute("aria-label", `${hiddenPostNumbers.length} 个隐藏楼层`), marker.dataset.readerContextHiddenDefaultExpanded = String(defaultExpanded), marker.dataset.readerContextHiddenPostNumbers = [
 	      hiddenPostNumbers.length,
 	      hiddenPostNumbers[0],
 	      hiddenPostNumbers.at(-1)
@@ -22629,7 +23038,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    const toggle = button(
 	      this.#document,
 	      "ldp-btn ldp-hidden-reply-toggle",
-	      `${expanded ? "收起" : "查看"} ${hiddenPostNumbers.length} 个隐藏回复`
+	      `${expanded ? "收起" : "查看"} ${hiddenPostNumbers.length} 个隐藏楼层头像`
 	    );
 	    toggle.dataset.readerContextHiddenToggle = "1", toggle.setAttribute("aria-expanded", String(expanded));
 	    const list = (0, import_html_element.htmlElement)(
@@ -22637,7 +23046,11 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      "div",
 	      "ldp-hidden-reply-list"
 	    );
-	    list.dataset.readerContextHiddenList = "1", list.dataset.readerContextHiddenRendered = "0", list.setAttribute("role", "list"), list.hidden = !expanded, expanded && this.#appendHiddenReplyBatch(marker, list), marker.append(toggle, list), this.#hiddenReplyMarkers.set(root, marker), root.classList.add("ldp-before-hidden-reply-marker"), marker.addEventListener("click", (event) => {
+	    list.dataset.readerContextHiddenList = "1", list.dataset.readerContextHiddenRendered = "0", list.setAttribute("role", "list"), list.hidden = !expanded, expanded && this.#appendHiddenReplyBatch(marker, list);
+	    const label = (0, import_html_element.htmlElement)(this.#document, "span", "ldp-hidden-reply-label");
+	    label.textContent = `隐藏 ${hiddenPostNumbers.length}`, marker.append(list, label, toggle), this.#hiddenReplyMarkers.set(root, marker), root.classList.add("ldp-before-hidden-reply-marker");
+	    const markerScope = this.scope.child();
+	    this.#hiddenReplyMarkerScopes.set(marker, markerScope), markerScope.add((0, import_reader_reply_avatar_interactions.bindReaderReplyAvatarInteractions)(marker, this, markerScope, this.#onError)), markerScope.listen(marker, "click", (event) => {
 	      this.#handleClick(event, root, postNumber).catch((error) => {
 	        !this.scope.destroyed && marker.isConnected && this.#onError(error);
 	      });
@@ -22645,48 +23058,25 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	  }
 	  #appendHiddenReplyBatch(marker, list) {
 	    list.querySelector("[data-reader-context-hidden-more]")?.remove();
-	    const postNumbers = this.#hiddenReplyPostNumbers.get(marker) ?? [], rendered = Math.min(
-	      postNumbers.length,
-	      Math.max(
-	        0,
-	        Number(list.dataset.readerContextHiddenRendered) || 0
-	      )
-	    ), end = Math.min(
-	      postNumbers.length,
-	      rendered + HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE
-	    );
-	    for (let index = rendered; index < end; index += 1) {
-	      const hiddenPostNumber = postNumbers[index], identity = this.#controller.postByNumber(hiddenPostNumber), username = String(identity?.username ?? "").trim(), displayName = String(identity?.name ?? "").trim() || username || `#${hiddenPostNumber}`, avatar = button(
-	        this.#document,
-	        "ldp-hidden-reply-avatar",
-	        `跳到 ${displayName} 的回复 #${hiddenPostNumber}`
-	      );
-	      avatar.dataset.readerContextHiddenPost = String(hiddenPostNumber), avatar.setAttribute("role", "listitem");
-	      const source = this.#avatarSource?.(
-	        String(identity?.avatar_template ?? ""),
-	        24
-	      ) ?? "";
-	      if (source) {
-	        const image = this.#document.createElement("img");
-	        image.src = source, image.alt = "", image.loading = "lazy", image.decoding = "async", avatar.append(image);
-	      } else
-	        avatar.textContent = [...displayName][0] ?? "?";
-	      list.append(avatar);
+	    const postNumbers = this.#hiddenReplyPostNumbers.get(marker) ?? [], strip = (0, import_html_element.htmlElement)(this.#document, "div", "ldp-hidden-reply-avatar-strip");
+	    list.append(strip);
+	    const end = Math.min(postNumbers.length, import_reader_reply_avatar_interactions.READER_REPLY_AVATAR_LIMIT);
+	    for (let index = 0; index < end; index += 1) {
+	      const hiddenPostNumber = postNumbers[index], avatar = this.createReplyAvatar(hiddenPostNumber);
+	      avatar.setAttribute("role", "listitem"), strip.append(avatar);
 	    }
 	    if (list.dataset.readerContextHiddenRendered = String(end), end >= postNumbers.length) return;
-	    const remaining = postNumbers.length - end, nextBatchSize = Math.min(
-	      remaining,
-	      HIDDEN_REPLY_MATERIALIZE_BATCH_SIZE
-	    ), more = button(
+	    const remaining = postNumbers.length - end, more = button(
 	      this.#document,
 	      "ldp-btn ldp-hidden-reply-more",
-	      `再显示 ${nextBatchSize} 个隐藏回复，剩余 ${remaining} 个`,
-	      `+${nextBatchSize}`
+	      `查看其余 ${remaining} 个隐藏楼层头像`,
+	      `+${remaining}`
 	    );
-	    more.dataset.readerContextHiddenMore = "1", more.setAttribute("role", "listitem"), list.append(more);
+	    more.dataset.readerContextHiddenMore = "1", more.setAttribute("role", "listitem"), more.setAttribute("aria-haspopup", "dialog"), list.append(more);
 	  }
 	  #removeHiddenReplyMarker(root) {
-	    this.#hiddenReplyMarkers.get(root)?.remove(), this.#hiddenReplyMarkers.delete(root), root.classList.remove("ldp-before-hidden-reply-marker");
+	    const marker = this.#hiddenReplyMarkers.get(root);
+	    marker && this.#hiddenReplyMarkerScopes.get(marker)?.destroy(), marker?.remove(), this.#hiddenReplyMarkers.delete(root), root.classList.remove("ldp-before-hidden-reply-marker");
 	  }
 	  async #handleClick(event, root, rootPostNumber) {
 	    const target = (0, import_event_target.eventElement)(event);
@@ -22714,11 +23104,11 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      );
 	      if (!list) return;
 	      const expanded2 = list.hidden;
-	      expanded2 && list.dataset.readerContextHiddenRendered === "0" && this.#appendHiddenReplyBatch(hiddenMarker, list), list.hidden = !expanded2, hiddenToggle.setAttribute("aria-expanded", String(expanded2));
+	      expanded2 && list.dataset.readerContextHiddenRendered === "0" && this.#appendHiddenReplyBatch(hiddenMarker, list), list.hidden = !expanded2, expanded2 || this.dismissReplyAvatarSurfaces(hiddenMarker), hiddenToggle.setAttribute("aria-expanded", String(expanded2));
 	      const hiddenPostCount = this.#hiddenReplyPostNumbers.get(hiddenMarker)?.length ?? 0;
 	      hiddenToggle.setAttribute(
 	        "aria-label",
-	        `${expanded2 ? "收起" : "查看"} ${hiddenPostCount} 个隐藏回复`
+	        `${expanded2 ? "收起" : "查看"} ${hiddenPostCount} 个隐藏楼层头像`
 	      );
 	      return;
 	    }
@@ -22729,32 +23119,30 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      event.preventDefault();
 	      const list = hiddenMore.closest(
 	        "[data-reader-context-hidden-list]"
+	      ), rendered = Number(list?.dataset.readerContextHiddenRendered) || 0;
+	      this.showReplyAvatarOverflow(
+	        (this.#hiddenReplyPostNumbers.get(hiddenMarker) ?? []).slice(rendered),
+	        hiddenMore
 	      );
-	      list && this.#appendHiddenReplyBatch(hiddenMarker, list);
 	      return;
 	    }
 	    const hiddenReply = target.closest(
 	      "[data-reader-context-hidden-post]"
 	    );
 	    if (hiddenReply && hiddenMarker?.contains(hiddenReply)) {
-	      event.preventDefault();
-	      const navigation = this.#navigate();
-	      if (!navigation) throw new Error("隐藏楼层跳转时 navigation 尚未就绪");
-	      await navigation.navigate({
-	        postNumber: (0, import_identifiers.discoursePostNumber)(
-	          hiddenReply.dataset.readerContextHiddenPost
-	        ),
-	        source: "timeline",
-	        alignment: "nearest",
-	        highlight: !0
-	      });
+	      event.preventDefault(), await this.#controller.openDiscussion(
+	        (0, import_identifiers.discoursePostNumber)(hiddenReply.dataset.readerContextHiddenPost)
+	      );
 	      return;
 	    }
 	    const selfButton = target.closest(
 	      "[data-reader-context-self]"
 	    );
 	    if (selfButton && root.contains(selfButton)) {
-	      event.preventDefault();
+	      if (event.preventDefault(), root.closest(".ldp-hidden-reply-preview")) {
+	        await this.openReplyDiscussion(Number(selfButton.dataset.targetPostNumber));
+	        return;
+	      }
 	      const navigation = this.#navigate();
 	      if (!navigation) throw new Error("楼层跳转时 navigation 尚未就绪");
 	      await navigation.navigate({
@@ -23168,14 +23556,12 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	  #discussionBranchFrame = 0;
 	  #discussionContentWidth = 0;
 	  #observesDiscussionSize = !1;
-	  #treePan = null;
-	  #suppressTreeClick = !1;
 	  #lastWorkspaceFullPage;
 	  get discussionContentHost() {
 	    return this.#discussionLayer;
 	  }
-	  scrollDiscussionHorizontal(delta) {
-	    return this.scope.destroyed || this.#discussionLayer.hidden || !Number.isFinite(delta) || delta === 0 ? !1 : (this.#discussionList.scrollLeft += delta, !0);
+	  scrollDiscussionHorizontal(_delta) {
+	    return !1;
 	  }
 	  constructor(options) {
 	    this.scope = import_lifecycle.LifecycleScope.ownedBy(options.parentScope), this.#document = options.document, this.#controller = options.controller, this.#state = options.stateRepository ?? new import_reader_topic_context_state.ReaderTopicContextStateRepository({
@@ -23287,7 +23673,22 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	        1,
 	        Number(defaultView?.innerHeight) || options.discussionHost.clientHeight || 1
 	      )
-	    })), viewport = readViewport(), viewportTarget = options.viewportTarget ?? defaultView;
+	    })), viewport = readViewport(), contextFeature = options.postFeatures?.find(
+	      (feature) => feature instanceof ReaderTopicContextFeature
+	    );
+	    let avatarSurface = null;
+	    contextFeature && (avatarSurface = new import_reader_reply_avatar_surface.ReaderReplyAvatarSurface({
+	      document: options.document,
+	      controller: this.#controller,
+	      projector: this.#postProjector,
+	      avatars: contextFeature,
+	      readViewport,
+	      requestFrame: this.#requestFrame,
+	      cancelFrame: this.#cancelFrame,
+	      parentScope: this.scope,
+	      onError: this.#onError
+	    }), this.scope.add(contextFeature.connectReplyAvatarSurface(avatarSurface)));
+	    const viewportTarget = options.viewportTarget ?? defaultView;
 	    this.discussionGeometry = new import_reader_workspace.ReaderWindowGeometryModel({
 	      preferences: {
 	        readerWindowWidth: 0,
@@ -23345,18 +23746,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	          return;
 	        }
 	      }
-	    }), this.scope.listen(this.#discussionList, "pointerdown", (event) => {
-	      this.#onTreePanPointerDown(event);
-	    }), this.scope.listen(this.#discussionList, "pointermove", (event) => {
-	      this.#onTreePanPointerMove(event);
 	    });
-	    for (const type of ["pointerup", "pointercancel", "lostpointercapture"])
-	      this.scope.listen(this.#discussionList, type, (event) => {
-	        this.#stopTreePan(event);
-	      });
-	    this.scope.listen(this.#discussionList, "click", (event) => {
-	      this.#suppressTreeClick && (event.preventDefault(), event.stopImmediatePropagation());
-	    }, !0);
 	    const NativeResizeObserver = defaultView?.ResizeObserver, createResizeObserver = options.createResizeObserver ?? (NativeResizeObserver ? (callback) => new NativeResizeObserver(callback) : null);
 	    this.#layoutResizeObserver = createResizeObserver ? createResizeObserver((entries) => {
 	      const entry = entries.find((candidate) => candidate.target === this.#discussionList);
@@ -23373,8 +23763,10 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      this.scope.listen(target, "keydown", (event) => {
 	        this.handleEscape(event);
 	      }, !0);
+	    let discussionWasOpen = this.#controller.snapshot().discussion !== null;
 	    this.#controller.changes.subscribe((snapshot) => {
-	      this.#project(snapshot);
+	      const discussionClosed = discussionWasOpen && snapshot.discussion === null;
+	      discussionWasOpen = snapshot.discussion !== null, this.#project(snapshot), discussionClosed && avatarSurface?.dismissPreview();
 	    }, this.scope), this.#workspace.changes.subscribe((snapshot) => {
 	      const fullPage = snapshot.presentation.fullPage;
 	      fullPage !== this.#lastWorkspaceFullPage && (this.#lastWorkspaceFullPage = fullPage, this.#controller.closeDiscussion()), this.discussionGeometry.setMode(
@@ -23390,7 +23782,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	        stored.top
 	      );
 	    }, this.scope), this.scope.add(() => {
-	      this.#persistActiveDiscussionPoint(), this.#treeWidthFrame && (this.#cancelFrame(this.#treeWidthFrame), this.#treeWidthFrame = 0), this.#discussionBranchFrame && (this.#cancelFrame(this.#discussionBranchFrame), this.#discussionBranchFrame = 0), this.#stopTreePan();
+	      this.#persistActiveDiscussionPoint(), this.#treeWidthFrame && (this.#cancelFrame(this.#treeWidthFrame), this.#treeWidthFrame = 0), this.#discussionBranchFrame && (this.#cancelFrame(this.#discussionBranchFrame), this.#discussionBranchFrame = 0);
 	      for (const postNumber of this.#mountedDiscussionPostNumbers) {
 	        const root = this.discussionDomOwner.view(postNumber)?.slots.root;
 	        root && this.#detachDiscussionFeatures(root, postNumber);
@@ -23544,9 +23936,15 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    const targetPostNumber = snapshot.targetPostNumber;
 	    if (targetPostNumber !== null) {
 	      const target = this.discussionDomOwner.view(targetPostNumber)?.slots.root;
-	      target?.isConnected && (this.#highlight(target), target.scrollIntoView?.({ block: "center", inline: "nearest" }), this.#requestFrame(() => {
-	        this.scope.destroyed || this.#controller.clearDiscussionTarget();
-	      }));
+	      if (target?.isConnected) {
+	        const region = (0, import_post_view_region.readPostViewOwnRegion)(target).rect, viewport = this.#discussionList.getBoundingClientRect(), availableHeight = Math.max(0, viewport.height - 24), offset = region.height <= availableHeight ? 12 + (availableHeight - region.height) / 2 : 12;
+	        this.#discussionList.scrollTop = Math.max(
+	          0,
+	          this.#discussionList.scrollTop + region.top - viewport.top - offset
+	        ), this.#highlight(target), this.#requestFrame(() => {
+	          this.scope.destroyed || this.#controller.clearDiscussionTarget();
+	        });
+	      }
 	    }
 	  }
 	  #syncDiscussionBranches(snapshot) {
@@ -23703,7 +24101,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    return anchor ? Object.freeze({
 	      number: (0, import_identifiers.discoursePostNumber)(anchor.dataset.postNumber),
 	      scrollTop: Math.max(0, this.#discussionList.scrollTop),
-	      scrollLeft: Math.max(0, this.#discussionList.scrollLeft),
+	      scrollLeft: 0,
 	      offset: anchor.getBoundingClientRect().top - listRect.top
 	    }) : null;
 	  }
@@ -23713,7 +24111,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    const target = this.discussionDomOwner.view(point.number)?.slots.root;
 	    if (!target?.isConnected) return;
 	    const currentScrollTop = Math.max(0, this.#discussionList.scrollTop), targetRect = target.getBoundingClientRect(), listRect = this.#discussionList.getBoundingClientRect(), anchoredScrollTop = currentScrollTop + targetRect.top - listRect.top - point.offset;
-	    this.#pendingRestorePoint = null, this.#discussionList.scrollLeft = point.scrollLeft, this.#discussionList.scrollTop = Math.max(
+	    this.#pendingRestorePoint = null, this.#discussionList.scrollLeft = 0, this.#discussionList.scrollTop = Math.max(
 	      0,
 	      Number.isFinite(anchoredScrollTop) ? anchoredScrollTop : point.scrollTop
 	    );
@@ -23766,8 +24164,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    completed || (this.#treeWidthFrame = handle);
 	  }
 	  #syncDiscussionTreeWidth() {
-	    const snapshot = this.#controller.snapshot().discussion;
-	    if (!snapshot || this.#discussionLayer.hidden) return;
+	    if (!this.#controller.snapshot().discussion || this.#discussionLayer.hidden) return;
 	    let contentWidth = this.#discussionContentWidth;
 	    if (contentWidth <= 0) {
 	      if (this.#observesDiscussionSize) return;
@@ -23776,85 +24173,14 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	      ), padding = Number.parseFloat(style?.paddingLeft ?? "") + Number.parseFloat(style?.paddingRight ?? ""), horizontalPadding = Number.isFinite(padding) ? padding : 0;
 	      contentWidth = this.#discussionList.clientWidth - horizontalPadding;
 	    }
-	    const baseWidth = Math.max(320, contentWidth), maxDepth = snapshot.entries.reduce(
-	      (depth, entry) => Math.max(depth, entry.depth),
-	      0
-	    ), visibleDepth = Math.max(
-	      0,
-	      Math.floor((baseWidth - 320) / 28)
-	    ), overflowDepth = Math.max(0, maxDepth - visibleDepth);
+	    const baseWidth = Math.max(0, contentWidth);
 	    this.#discussionList.style.setProperty(
 	      "--ldp-descendant-tree-width",
-	      `${baseWidth + overflowDepth * 28}px`
+	      `${baseWidth}px`
 	    ), this.#discussionList.style.setProperty(
-	      "--ldp-descendant-tree-pan-width",
-	      `${baseWidth + maxDepth * 28}px`
-	    );
-	    const hasHorizontalOverflow = overflowDepth > 0 || this.#discussionList.scrollWidth > this.#discussionList.clientWidth + 1;
-	    this.#discussionList.classList.toggle(
-	      "ldp-descendant-tree-pannable",
-	      hasHorizontalOverflow
-	    ), hasHorizontalOverflow || (this.#discussionList.scrollLeft = 0);
-	  }
-	  #onTreePanPointerDown(event) {
-	    const target = (0, import_event_target.eventElement)(event), hasHorizontalOverflow = this.#discussionList.classList.contains(
-	      "ldp-descendant-tree-pannable"
-	    ) || this.#discussionList.scrollWidth > this.#discussionList.clientWidth + 1;
-	    if (!(event.button !== 0 || event.pointerType && event.pointerType !== "mouse" || !hasHorizontalOverflow || !target || target.closest([
-	      "button",
-	      "a",
-	      "input",
-	      "select",
-	      "textarea",
-	      '[contenteditable="true"]',
-	      '[role="button"]',
-	      ".ldp-post-head",
-	      ".ldp-content",
-	      ".ldp-reactions",
-	      ".ldp-boost-list",
-	      ".ldp-sub-actions",
-	      ".ldp-topic-footer-actions",
-	      "img",
-	      "video",
-	      "audio",
-	      "canvas",
-	      "pre",
-	      "code"
-	    ].join(",")))) {
-	      this.#treePan = {
-	        pointerId: event.pointerId,
-	        startX: event.clientX,
-	        scrollLeft: this.#discussionList.scrollLeft,
-	        moved: !1
-	      };
-	      try {
-	        this.#discussionList.setPointerCapture?.(event.pointerId);
-	      } catch {
-	      }
-	    }
-	  }
-	  #onTreePanPointerMove(event) {
-	    const pan = this.#treePan;
-	    if (!pan || event.pointerId !== pan.pointerId) return;
-	    const deltaX = event.clientX - pan.startX;
-	    !pan.moved && Math.abs(deltaX) < 3 || (pan.moved = !0, this.#discussionList.classList.add(
-	      "ldp-descendant-tree-panning"
-	    ), this.#discussionList.scrollLeft = pan.scrollLeft - deltaX, event.preventDefault());
-	  }
-	  #stopTreePan(event) {
-	    const pan = this.#treePan;
-	    if (!(!pan || event && event.pointerId !== pan.pointerId)) {
-	      this.#treePan = null, this.#discussionList.classList.remove(
-	        "ldp-descendant-tree-panning"
-	      );
-	      try {
-	        this.#discussionList.hasPointerCapture?.(pan.pointerId) && this.#discussionList.releasePointerCapture?.(pan.pointerId);
-	      } catch {
-	      }
-	      pan.moved && (this.#suppressTreeClick = !0, this.#requestFrame(() => {
-	        this.#suppressTreeClick = !1;
-	      }));
-	    }
+	      "--ldp-descendant-min-post-width",
+	      `${Math.min(320, baseWidth * 0.7)}px`
+	    ), this.#discussionList.scrollLeft = 0;
 	  }
 	  #syncWorkspaceMode(fullPage) {
 	    this.#discussionLayer.classList.toggle(
@@ -23872,7 +24198,7 @@ runtime.register("src/topic/reader-topic-context-surface.js", function(module, e
 	    );
 	  }
 	}
-}, "f778f1c9bb14e3043cb100800c52942cca995836d0165af39077c0a1c63bdbbb");
+}, "5c89e325fc7e5de22db89d89dd2529ea9f7cae0e25443bcd74af385b390947ba");
 
 /* Source: lite/src/topic/reader-topic-core-bundle.ts */
 runtime.register("src/topic/reader-topic-core-bundle.js", function(module, exports, require) {
@@ -26968,7 +27294,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  ReaderTopicScrollAdapter: () => ReaderTopicScrollAdapter
 	});
 	module.exports = __toCommonJS(reader_topic_scroll_adapter_exports);
-	var import_lifecycle = require("../kernel/lifecycle.js"), import_event_target = require("../dom/event-target.js");
+	var import_lifecycle = require("../kernel/lifecycle.js"), import_event_target = require("../dom/event-target.js"), import_post_view_region = require("../dom/post-view-region.js");
 	function finiteNonNegative(value, fallback = 0) {
 	  return Number.isFinite(value) && value >= 0 ? value : fallback;
 	}
@@ -27011,11 +27337,11 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    if (this.scope.destroyed || !target.isConnected) return;
 	    this.clear();
 	    const token = String(++this.#token);
-	    target.classList.remove("ldp-jump-highlight"), target.style.removeProperty("--ldp-first-post-jump-highlight-height");
-	    const anchor = this.#syncFirstPostRegion(target);
+	    target.classList.remove("ldp-jump-highlight"), target.style.removeProperty("--ldp-post-jump-highlight-height");
+	    const anchor = this.#syncPostRegion(target);
 	    target.offsetWidth, target.dataset.jumpHighlightToken = token, target.classList.add("ldp-jump-highlight");
 	    const observer = anchor ? this.#createResizeObserver(() => {
-	      target.isConnected && target.dataset.jumpHighlightToken === token && this.#syncFirstPostRegion(target);
+	      target.isConnected && target.dataset.jumpHighlightToken === token && this.#syncPostRegion(target);
 	    }) : null;
 	    observer?.observe(target), anchor && observer?.observe(anchor);
 	    const lifetime = this.#prefersReducedMotion() ? 1e3 : Math.max(1, finiteNonNegative(this.#readLifetimeMs(), 2500)), timer = this.#schedule(() => {
@@ -27030,37 +27356,16 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	  destroy() {
 	    this.scope.destroy();
 	  }
-	  #syncFirstPostRegion(target) {
-	    if (target.dataset.postNumber !== "1") return null;
-	    const actions = target.querySelector(
-	      ":scope > .ldp-post-body .ldp-reactions, :scope > .ldp-reactions"
-	    ), targetRect = target.getBoundingClientRect();
-	    if (actions) {
-	      const actionsRect = actions.getBoundingClientRect();
-	      if (actionsRect.height > 0 && actionsRect.bottom > targetRect.top)
-	        return this.#setFirstPostRegion(target, targetRect, actionsRect), actions;
-	    }
-	    const body = target.querySelector(
-	      ":scope > .ldp-post-body"
-	    );
-	    return body ? (this.#setFirstPostRegion(
-	      target,
-	      targetRect,
-	      body.getBoundingClientRect()
-	    ), body) : null;
-	  }
-	  #setFirstPostRegion(target, targetRect, boundaryRect) {
-	    const height = Math.min(
-	      targetRect.height,
-	      Math.max(0, boundaryRect.bottom - targetRect.top)
-	    );
-	    target.style.setProperty(
-	      "--ldp-first-post-jump-highlight-height",
-	      `${Math.ceil(height)}px`
-	    );
+	  #syncPostRegion(target) {
+	    if (!target.classList.contains("ldp-post")) return null;
+	    const region = (0, import_post_view_region.readPostViewOwnRegion)(target);
+	    return target.style.setProperty(
+	      "--ldp-post-jump-highlight-height",
+	      `${Math.ceil(Math.max(0, region.rect.height))}px`
+	    ), region.boundary;
 	  }
 	  #clearTarget(target) {
-	    target.classList.remove("ldp-jump-highlight"), target.style.removeProperty("--ldp-first-post-jump-highlight-height"), delete target.dataset.jumpHighlightToken;
+	    target.classList.remove("ldp-jump-highlight"), target.style.removeProperty("--ldp-post-jump-highlight-height"), delete target.dataset.jumpHighlightToken;
 	  }
 	}
 	class ReaderBoostTargetHighlightController {
@@ -27379,7 +27684,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    if (!target.isConnected) return Number.POSITIVE_INFINITY;
 	    if (options.alignment === "end")
 	      return this.readScrollRange() - finiteNonNegative(this.#scrollRoot.scrollTop);
-	    const rootRect = this.#scrollRoot.getBoundingClientRect(), targetRect = target.getBoundingClientRect(), topInset = Math.min(
+	    const rootRect = this.#scrollRoot.getBoundingClientRect(), targetRect = (0, import_post_view_region.readPostViewOwnRegion)(target).rect, topInset = Math.min(
 	      rootRect.height,
 	      finiteNonNegative(this.#readTopInset())
 	    ), configuredVisibleTop = rootRect.top + topInset, frozenHeaderBottom = options.viewportOffset === void 0 ? configuredVisibleTop : this.#scrollRoot.closest(".ldp-modal")?.querySelector(":scope > .ldp-header")?.getBoundingClientRect().bottom ?? configuredVisibleTop, visibleTop = Math.min(
@@ -27659,7 +27964,7 @@ runtime.register("src/topic/reader-topic-scroll-adapter.js", function(module, ex
 	    ), this.#scrollOffsetDirty = !1), this.#pendingScrollOffset ?? this.#scrollOffset;
 	  }
 	}
-}, "29424c45778c4881c8f3c49d097f566616dff32b7247425eb74f2c2e7f9ece82");
+}, "05ba007948b0dc76800601c50213865cd15e34c8f21d4535aefe6ed7aaccfde9");
 
 /* Source: lite/src/topic/reader-topic-scroll-lifecycle.ts */
 runtime.register("src/topic/reader-topic-scroll-lifecycle.js", function(module, exports, require) {
@@ -31390,6 +31695,41 @@ runtime.register("src/userscript/browser-userscript-environment.js", function(mo
 	      delete: (name) => remove.call(storage, name)
 	    });
 	  }
+	  registerMenuCommand(caption, listener) {
+	    const modern = (0, import_value_record.objectRecord)(this.#userscriptGlobal.GM), modernRegister = modern?.registerMenuCommand, legacyRegister = this.#userscriptGlobal.GM_registerMenuCommand, owner = typeof modernRegister == "function" ? modern : this.#userscriptGlobal, register = typeof modernRegister == "function" ? modernRegister : legacyRegister;
+	    if (!owner || typeof register != "function") return null;
+	    let commandId;
+	    try {
+	      commandId = Promise.resolve(register.call(
+	        owner,
+	        String(caption),
+	        listener
+	      ));
+	    } catch {
+	      return null;
+	    }
+	    let active = !0;
+	    return () => {
+	      if (!active) return;
+	      active = !1;
+	      const modernUnregister = modern?.unregisterMenuCommand, legacyUnregister = this.#userscriptGlobal.GM_unregisterMenuCommand, unregisterOwner = typeof modernUnregister == "function" ? modern : this.#userscriptGlobal, unregister = typeof modernUnregister == "function" ? modernUnregister : legacyUnregister;
+	      !unregisterOwner || typeof unregister != "function" || commandId.then((id) => {
+	        unregister.call(unregisterOwner, id);
+	      }).catch(() => {
+	      });
+	    };
+	  }
+	  createCustomSiteAccess() {
+	    const access = (0, import_value_record.objectRecord)(
+	      this.#userscriptGlobal.readerExtensionSiteAccess ?? this.#userscriptGlobal.__LDP_EXTENSION_SITE_ACCESS__
+	    ), request = access?.request, remove = access?.remove;
+	    return !access || typeof request != "function" || typeof remove != "function" ? null : Object.freeze({
+	      request: async (host) => !!await request.call(access, String(host)),
+	      remove: async (host) => {
+	        await remove.call(access, String(host));
+	      }
+	    });
+	  }
 	  createValueStorage() {
 	    const subscription = (owner, add, remove) => (key, listener) => {
 	      let active = !0, id;
@@ -31516,7 +31856,7 @@ runtime.register("src/userscript/browser-userscript-environment.js", function(mo
 	    };
 	  }
 	}
-}, "f7ae985b3af258589b78ad9bfe575b95dec7d094f424902dfffcd6ae2db45112");
+}, "53143acf5912a7277baa8006184286acb86571ee3e1d92dafff99abf9f24715f");
 
 /* Source: lite/src/userscript/main-lite-bootstrap.ts */
 runtime.register("src/userscript/main-lite-bootstrap.js", function(module, exports, require) {
@@ -32191,7 +32531,16 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	          }
 	        },
 	        onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
-	          state.runtime = runtime, (0, import_reader_detected_site_onboarding.onboardDetectedDiscourseSite)({
+	          state.runtime = runtime;
+	          const unregisterSitesMenu = settingsView ? environment.registerMenuCommand(
+	            "添加适用站点 / Match",
+	            () => {
+	              settingsView.open("sites"), runtime.feedback.show(
+	                "已打开适用站点；验证保存后请按页面提示添加用户匹配"
+	              );
+	            }
+	          ) : null;
+	          (0, import_reader_detected_site_onboarding.onboardDetectedDiscourseSite)({
 	            hostname: document.location.hostname,
 	            detection: applicationContext.host.detection,
 	            repository: customSites.repository,
@@ -32411,7 +32760,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	            composerWindow
 	          );
 	          return runtime.composer.warmReply(), () => {
-	            unbindComposerWindow(), composerWindow.destroy(), embeddedReload?.destroy(), persistTranslationMode = null, state.runtime === runtime && (state.runtime = null);
+	            unregisterSitesMenu?.(), unbindComposerWindow(), composerWindow.destroy(), embeddedReload?.destroy(), persistTranslationMode = null, state.runtime === runtime && (state.runtime = null);
 	          };
 	        }
 	      }).setup(scope, applicationContext);
@@ -32483,7 +32832,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	    }
 	  ), valueStorage = environment.createValueStorage(), customSiteRepository = new import_reader_custom_site_repository.ReaderCustomSiteRepository({
 	    storage: valueStorage
-	  }), translation = valueStorage ? new import_reader_translation_config.ReaderTranslationConfigRepository({ storage: valueStorage }) : null;
+	  }), customSiteAccess = environment.createCustomSiteAccess(), translation = valueStorage ? new import_reader_translation_config.ReaderTranslationConfigRepository({ storage: valueStorage }) : null;
 	  let customSiteProbe = null;
 	  try {
 	    customSiteProbe = environment.createDiscourseSiteProbe();
@@ -32568,6 +32917,8 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	        {
 	          repository: customSiteRepository,
 	          probe: customSiteProbe,
+	          siteAccess: customSiteAccess,
+	          clipboard: environment.createShareSurface(),
 	          translation,
 	          webDav
 	        }
@@ -32611,7 +32962,7 @@ ${(0, import_reader_katex_controller.readerKatexStylesheet)(
 	  }), handle;
 	}
 	const startMianLiteUserscript = startMainLiteUserscript;
-}, "df893597e6ac2de631b38cdd958db0c5c01d912734261324d1b8810e62b9615b");
+}, "d27b14add8873815339af9cb2a25815db633ef358034b54210595caea17a063c");
 
 /* Source: lite/src/userscript/main-lite-entry.ts */
 runtime.register("src/userscript/main-lite-entry.js", function(module, exports, require) {
@@ -32628,6 +32979,8 @@ runtime.register("src/userscript/main-lite-entry.js", function(module, exports, 
 	  GM_setValue: callable(typeof GM_setValue > "u" ? void 0 : GM_setValue),
 	  GM_addValueChangeListener: callable(typeof GM_addValueChangeListener > "u" ? void 0 : GM_addValueChangeListener),
 	  GM_removeValueChangeListener: callable(typeof GM_removeValueChangeListener > "u" ? void 0 : GM_removeValueChangeListener),
+	  GM_registerMenuCommand: callable(typeof GM_registerMenuCommand > "u" ? void 0 : GM_registerMenuCommand),
+	  GM_unregisterMenuCommand: callable(typeof GM_unregisterMenuCommand > "u" ? void 0 : GM_unregisterMenuCommand),
 	  GM_xmlhttpRequest: callable(typeof GM_xmlhttpRequest > "u" ? void 0 : GM_xmlhttpRequest),
 	  GM_addElement: callable(typeof GM_addElement > "u" ? void 0 : GM_addElement),
 	  GM_getResourceText: callable(typeof GM_getResourceText > "u" ? void 0 : GM_getResourceText),
@@ -32635,7 +32988,7 @@ runtime.register("src/userscript/main-lite-entry.js", function(module, exports, 
 	  Hls: typeof Hls > "u" ? void 0 : Hls,
 	  pinyinPro: typeof pinyinPro > "u" ? void 0 : pinyinPro
 	});
-}, "a4ce83964e4b6618d479eeb3b55fd8bc40a5320a62396917ad04159d0ac38395");
+}, "0e651eb357af58d0301e9b8020fc85a48f6088637b86d6c5ed843147f1befcc6");
 
 /* Source: lite/src/userscript/reader-embedded-reload-coordinator.ts */
 runtime.register("src/userscript/reader-embedded-reload-coordinator.js", function(module, exports, require) {

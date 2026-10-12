@@ -436,6 +436,7 @@ import {
 } from '../settings/reader-shortcut-settings-form.js';
 import {
 	ReaderCustomSiteSettingsForm,
+	type ReaderCustomSiteAccessPort,
 } from '../settings/reader-custom-site-settings-form.js';
 import {
 	ReaderWebDavSettingsForm,
@@ -1296,6 +1297,10 @@ export interface ReaderBrowserRuntimeStageOptions<
 			| Readonly<{
 				readonly repository: ReaderCustomSiteRepository;
 				readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+				readonly siteAccess?: ReaderCustomSiteAccessPort | null;
+				readonly clipboard?:
+					| Pick<ReaderShareSurfacePort, 'copyText'>
+					| null;
 			}>;
 		readonly webDav?:
 			| false
@@ -4238,6 +4243,7 @@ export class ReaderBrowserRuntime<
 								: {}),
 							controller: topicContext,
 							replies: bundle.replies,
+							readState: bundle.services.read,
 							presentationChanges: topicPresentationChanges,
 							presentation: replyTreePresentation,
 							avatarSource: (template, size) =>
@@ -5076,6 +5082,7 @@ export class ReaderBrowserRuntime<
 						context.scope,
 						new ReaderTopicLiveNavigationView({
 							navigation: liveNavigation,
+							replyAvatars: features.topicContextFeature,
 							elements: readerTopicLiveNavigationElements(
 								this.shell.view.root,
 							),
@@ -8126,6 +8133,8 @@ export function createReaderBrowserRuntimeStage<
 					host: settingsView.panelHost('sites'),
 					repository: sitesFormOptions.repository,
 					probe: coordinatedProbe,
+					siteAccess: sitesFormOptions.siteAccess ?? null,
+					clipboard: sitesFormOptions.clipboard ?? null,
 					parentScope: runtime.scope,
 				});
 			}

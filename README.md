@@ -21,7 +21,7 @@
   <a href="CONTRIBUTING.md">参与开发</a>
 </p>
 
-<p align="center"><sub>Lite 1.6.6 · TypeScript · MIT License · Tampermonkey</sub></p>
+<p align="center"><sub>Lite 1.6.7 · TypeScript · MIT License · Tampermonkey</sub></p>
 
 <p align="center">
   <a href="assets/screenshots/guide-01-reader-overview-v1.5.0.png">
@@ -121,7 +121,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 | --- | --- |
 | LINUX DO | 深度适配，作为完整功能基线 |
 | 内置社区 | 预置 20 个常用 Discourse 社区 |
-| 其他标准 Discourse | 脚本管理器另行允许域名后，通过运行态与 DOM 证据识别并提示保存 |
+| 其他标准 Discourse | Chrome 扩展版按用户确认授予精确站点权限；userscript 版由脚本管理器另行允许域名 |
 | 站点插件 | 按实际能力显示 Reactions、Boost、Topic Voting 等入口 |
 | 桌面与移动端 | 支持浮窗、嵌入、全屏和移动布局 |
 
@@ -139,7 +139,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 
 ## 开始使用
 
-当前项目版本为 `1.6.6`。
+当前项目版本为 `1.6.7`。
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或兼容的 userscript 管理器。
 2. 前往 [Greasy Fork](https://greasyfork.org/zh-CN/scripts/588185-awesome-linuxdo-reader) 安装 **Awesome LinuxDo Reader**。
@@ -159,7 +159,7 @@ LINUX DO 是完整功能基线。对于其他标准 Discourse 社区，阅读器
 | 常见问题 | [故障排查](https://sunbigfly.github.io/awesome-linuxdo-reader/manage/troubleshooting) |
 | 版本变化 | [更新记录](https://sunbigfly.github.io/awesome-linuxdo-reader/reference/changelog) |
 
-需要一个文件直接导入时，下载 [1.6.6 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
+需要一个文件直接导入时，下载 [1.6.7 纯本地单文件（CDN）](https://gcore.jsdelivr.net/gh/sunbigfly/awesome-linuxdo-reader@f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)（[GitHub 源文件](https://github.com/sunbigfly/awesome-linuxdo-reader/blob/f089a78c0a9eaae1e2eccfdc9e8fc51c35826b51/work/main-lite.standalone.user.js)）。阅读器、CSS、第三方库和数学字体全部内置，无 `@require`、`@resource`，不依赖 `GM_getResourceText`。安装后只启用这一版；更新时重新下载导入，论坛内容与在线服务仍需联网。
 
 <details>
 <summary><strong>面向开发者</strong></summary>
@@ -179,6 +179,8 @@ npm run main-lite:local-debug
 需要直接导入油猴时，使用生成的 `work/main-lite.standalone.user.js`：阅读器 JS、CSS、KaTeX、拼音和视频库以及数学字体全部内置，没有 `@require`、`@resource`，也不依赖 `GM_getResourceText` 或本机文件路径。脚本依赖无需联网下载，论坛内容和用户启用的在线服务仍正常联网。纯本地版关闭自动更新，重新构建后需重新导入；它与正式版、其他本地版不可同时启用。
 
 开发规范、验证要求和提交约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+仓库根目录也可作为未打包 Chrome 扩展加载。扩展版在“适用站点”验证新论坛前弹出浏览器原生权限确认，只授予并注册所选的 `https://域名/*`；移除站点时同步注销内容脚本并撤销该域名权限。`optional_host_permissions` 中的通配符只声明可申请范围，不会在安装时直接授予全部 HTTPS 站点。
 
 </details>
 

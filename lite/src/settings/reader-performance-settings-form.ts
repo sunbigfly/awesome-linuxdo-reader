@@ -59,6 +59,7 @@ import {
 import {
 	ReaderNumericSettingsDraft,
 } from './reader-numeric-settings-draft.js';
+import { createReaderNetworkSettingsGroup } from './reader-network-settings-group.js';
 
 export interface ReaderPerformanceSettingsPreferencesAdapter<
 	TPreferences extends object,
@@ -858,6 +859,10 @@ export class ReaderPerformanceSettingsForm<TPreferences extends object> {
 			'div',
 			'ldp-settings-category-groups',
 		);
+		categoryGroups.append(createReaderNetworkSettingsGroup({
+			document: options.document,
+			scope: this.scope,
+		}));
 		for (const group of groups) {
 			const groupNode = element(
 				options.document,

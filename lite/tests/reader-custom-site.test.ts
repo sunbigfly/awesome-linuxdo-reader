@@ -245,10 +245,12 @@ assert(
 	host.querySelector(
 		'[data-custom-site-remove="forum.test.example"]',
 	) &&
-		host.querySelector('.ldp-custom-site-status')?.textContent
+	host.querySelector('.ldp-custom-site-status')?.textContent
 			?.includes('测试论坛') &&
+		host.querySelector('.ldp-custom-site-status')?.textContent
+			?.includes('https://forum.test.example/*') &&
 		uiRepository.snapshot.includes('forum.test.example'),
-	'设置表单验证成功后必须由共享仓储持久化，并以安全 DOM 节点重绘列表',
+	'设置表单验证成功后必须持久化，并显示可加入脚本管理器的精确 Match',
 );
 host.querySelector<HTMLButtonElement>(
 	'[data-custom-site-remove="forum.test.example"]',
@@ -264,3 +266,186 @@ assert(
 	!host.children.length,
 	'销毁适用站点表单必须取消未完成检测并清空其 DOM owner',
 );
+
+const extensionHost = document.createElement('main');
+document.body.append(extensionHost);
+const extensionStorage = new Map<string, unknown>();
+const extensionRepository = new ReaderCustomSiteRepository({
+	storage: {
+		getValue: (key) => extensionStorage.get(key),
+		setValue: (key, value) => {
+			extensionStorage.set(key, value);
+		},
+	},
+});
+const accessRequests: string[] = [];
+const accessRemovals: string[] = [];
+const extensionForm = new ReaderCustomSiteSettingsForm({
+	document,
+	host: extensionHost,
+	repository: extensionRepository,
+	probe: {
+		async probe(hostname) {
+			return Object.freeze({ host: hostname, title: '扩展论坛' });
+		},
+	},
+	siteAccess: {
+		async request(hostname) {
+			accessRequests.push(hostname);
+			return true;
+		},
+		async remove(hostname) {
+			accessRemovals.push(hostname);
+		},
+	},
+});
+await Promise.resolve();
+await Promise.resolve();
+extensionHost.querySelector<HTMLInputElement>('.ldp-custom-site-input')!.value =
+	'forum.extension.example';
+extensionHost.querySelector<HTMLFormElement>('.ldp-custom-site-form')!
+	.dispatchEvent(event(window, 'submit'));
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+assert(
+	accessRequests[0] === 'forum.extension.example' &&
+		extensionRepository.snapshot.includes('forum.extension.example') &&
+		extensionHost.querySelector('.ldp-custom-site-status')?.textContent
+			?.includes('浏览器已允许 https://forum.extension.example/*'),
+	'扩展设置必须先申请精确站点权限，再保存已验证站点并提示刷新生效',
+);
+extensionHost.querySelector<HTMLButtonElement>(
+	'[data-custom-site-remove="forum.extension.example"]',
+)!.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+assert(
+	accessRemovals[0] === 'forum.extension.example' &&
+		!extensionRepository.snapshot.length,
+	'扩展设置移除站点时必须同步撤销动态站点权限',
+);
+extensionForm.destroy();
+
+// 纯 userscript 无法自行追加 @match：面板必须给出可复制的精确规则和 GUI 引导，
+// 而扩展模式已自动注册内容脚本，不应再出现“去管理器贴规则”的入口。
+const copyHost = document.createElement('main');
+document.body.append(copyHost);
+const copiedRules: string[] = [];
+let clipboardRejects = false;
+const noAccessForm = new ReaderCustomSiteSettingsForm({
+	document,
+	host: copyHost,
+	repository: new ReaderCustomSiteRepository({
+		storage: {
+			getValue: () => undefined,
+			setValue: () => undefined,
+		},
+	}),
+	probe: {
+		async probe(hostname) {
+			return Object.freeze({ host: hostname, title: '复制论坛' });
+		},
+	},
+	clipboard: {
+		async copyText(text) {
+			if (clipboardRejects) throw new Error('剪贴板被拒绝');
+			copiedRules.push(text);
+		},
+	},
+});
+await Promise.resolve();
+await Promise.resolve();
+copyHost.querySelector<HTMLInputElement>('.ldp-custom-site-input')!.value =
+	'forum.copy.example';
+copyHost.querySelector<HTMLFormElement>('.ldp-custom-site-form')!
+	.dispatchEvent(event(window, 'submit'));
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+assert(
+	copyHost.querySelector('.ldp-custom-site-guidance')?.textContent
+			?.includes('用户匹配') &&
+		copyHost.querySelector('.ldp-custom-site-rule')?.textContent ===
+			'https://forum.copy.example/*',
+	'纯 userscript 面板必须展示管理器引导与可读的精确匹配规则',
+);
+copyHost.querySelector<HTMLButtonElement>(
+	'[data-custom-site-copy="forum.copy.example"]',
+)?.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+assert(
+	copiedRules[0] === 'https://forum.copy.example/*' &&
+		copyHost.querySelector('.ldp-custom-site-status')?.textContent
+			?.includes('已复制 https://forum.copy.example/*'),
+	'复制按钮必须只复制精确匹配规则并回报成功',
+);
+clipboardRejects = true;
+copyHost.querySelector<HTMLButtonElement>(
+	'[data-custom-site-copy="forum.copy.example"]',
+)?.click();
+await new Promise<void>((resolve) => setTimeout(resolve, 0));
+assert(
+	copiedRules.length === 1 &&
+		copyHost.querySelector('.ldp-custom-site-status')?.textContent
+			?.includes('复制失败，请手动复制 https://forum.copy.example/*'),
+	'剪贴板失败时必须保留规则文本并提示手动复制，不能丢失规则',
+);
+noAccessForm.destroy();
+
+// 扩展模式：即使有剪贴板能力和已保存站点，也不得出现用户匹配入口。
+const accessHost = document.createElement('main');
+document.body.append(accessHost);
+const accessModeForm = new ReaderCustomSiteSettingsForm({
+	document,
+	host: accessHost,
+	repository: new ReaderCustomSiteRepository({
+		storage: {
+			getValue: () => ['forum.auto.example'],
+			setValue: () => undefined,
+		},
+	}),
+	probe: null,
+	clipboard: {
+		async copyText() {
+			throw new Error('扩展模式不应复制用户匹配规则');
+		},
+	},
+	siteAccess: {
+		async request() {
+			return true;
+		},
+		async remove() {},
+	},
+});
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	accessHost.querySelector('[data-custom-site-copy]') === null &&
+		accessHost.querySelector('.ldp-custom-site-rule') === null &&
+		accessHost.querySelector('.ldp-custom-site-guidance') === null &&
+		accessHost.querySelector(
+			'[data-custom-site-remove="forum.auto.example"]',
+		) !== null,
+	'扩展模式已自动注册内容脚本，不得显示用户匹配复制入口、规则与引导',
+);
+accessModeForm.destroy();
+
+// 缺少剪贴板能力时只隐藏复制按钮，规则文本仍必须可见可手动选取。
+const bareHost = document.createElement('main');
+document.body.append(bareHost);
+const bareForm = new ReaderCustomSiteSettingsForm({
+	document,
+	host: bareHost,
+	repository: new ReaderCustomSiteRepository({
+		storage: {
+			getValue: () => ['forum.manual.example'],
+			setValue: () => undefined,
+		},
+	}),
+	probe: null,
+});
+await Promise.resolve();
+await Promise.resolve();
+assert(
+	bareHost.querySelector('[data-custom-site-copy]') === null &&
+		bareHost.querySelector('.ldp-custom-site-rule')?.textContent ===
+			'https://forum.manual.example/*',
+	'剪贴板不可用时必须保留规则文本，仅隐藏复制按钮',
+);
+bareForm.destroy();

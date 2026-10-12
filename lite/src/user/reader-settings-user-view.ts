@@ -584,6 +584,13 @@ export class ReaderSettingsUserView {
 			}
 			return '登录后查看';
 		})();
+		const communityScoreLoginRequired =
+			snapshot.communityScore.phase === 'idle' ||
+			(snapshot.communityScore.phase === 'error' && (
+				snapshot.communityScore.errorStatus === null ||
+				snapshot.communityScore.errorStatus === undefined ||
+				[401, 403].includes(Number(snapshot.communityScore.errorStatus))
+			));
 		const card = node(this.#document, 'section', 'ldp-user-info-profile');
 		card.setAttribute('aria-label', '当前用户资料');
 		const cover = node(this.#document, 'div', 'ldp-user-info-cover');
@@ -799,6 +806,23 @@ export class ReaderSettingsUserView {
 						}`,
 					);
 					fact.dataset.userProfileFact = item.key;
+					const loginLink = item.key === 'community-score' &&
+						communityScoreLoginRequired;
+					const value = node(
+						this.#document,
+						loginLink ? 'a' : 'span',
+						'ldp-user-profile-fact-value',
+						item.value,
+					);
+					if (loginLink) {
+						value.setAttribute('href', 'https://cdk.linux.do/login');
+						value.setAttribute('target', '_blank');
+						value.setAttribute('rel', 'noopener noreferrer');
+						value.setAttribute(
+							'aria-label',
+							'登录 CDK 查看社区分数（在新标签页打开）',
+						);
+					}
 					fact.append(
 						node(
 							this.#document,
@@ -806,12 +830,7 @@ export class ReaderSettingsUserView {
 							'ldp-user-profile-fact-label',
 							item.label,
 						),
-						node(
-							this.#document,
-							'span',
-							'ldp-user-profile-fact-value',
-							item.value,
-						),
+						value,
 					);
 					groupNode.append(fact);
 				}

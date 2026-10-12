@@ -9,6 +9,8 @@ declare const GM_getValue: unknown;
 declare const GM_setValue: unknown;
 declare const GM_addValueChangeListener: unknown;
 declare const GM_removeValueChangeListener: unknown;
+declare const GM_registerMenuCommand: unknown;
+declare const GM_unregisterMenuCommand: unknown;
 declare const GM_xmlhttpRequest: unknown;
 declare const GM_addElement: unknown;
 declare const GM_getResourceText: unknown;
@@ -33,6 +35,8 @@ startMainLiteUserscript({
 	GM_setValue: callable(typeof GM_setValue === 'undefined' ? undefined : GM_setValue),
 	GM_addValueChangeListener: callable(typeof GM_addValueChangeListener === 'undefined' ? undefined : GM_addValueChangeListener),
 	GM_removeValueChangeListener: callable(typeof GM_removeValueChangeListener === 'undefined' ? undefined : GM_removeValueChangeListener),
+	GM_registerMenuCommand: callable(typeof GM_registerMenuCommand === 'undefined' ? undefined : GM_registerMenuCommand),
+	GM_unregisterMenuCommand: callable(typeof GM_unregisterMenuCommand === 'undefined' ? undefined : GM_unregisterMenuCommand),
 	GM_xmlhttpRequest: callable(typeof GM_xmlhttpRequest === 'undefined' ? undefined : GM_xmlhttpRequest),
 	GM_addElement: callable(typeof GM_addElement === 'undefined' ? undefined : GM_addElement),
 	GM_getResourceText: callable(typeof GM_getResourceText === 'undefined' ? undefined : GM_getResourceText),

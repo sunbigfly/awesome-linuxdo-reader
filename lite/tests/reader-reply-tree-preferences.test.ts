@@ -49,6 +49,18 @@ assert(
 		presentation.rootOf(5) === undefined,
 	'默认三层策略必须投影三层树，并继续报告 main 风格的连续隐藏主流楼层',
 );
+assert(presentation.showHiddenReplyAvatarsByDefault, '隐藏楼层头像必须默认常显');
+presentation.revealAsFloor(5);
+const projectionBeforeAvatarSetting = presentation.revision;
+const hiddenFloorsBeforeAvatarSetting = presentation.hiddenFloorRunAfter(1);
+presentation.update({ ...presentation.preferences, showHiddenReplyAvatarsByDefault: false });
+assert(
+	!presentation.showHiddenReplyAvatarsByDefault &&
+		presentation.revision === projectionBeforeAvatarSetting &&
+		presentation.rootOf(5) === 5 &&
+		presentation.hiddenFloorRunAfter(1) === hiddenFloorsBeforeAvatarSetting,
+	'头像设置热应用只改变标记，不能丢失临时揭示楼层或使回复树几何缓存失效',
+);
 
 presentation.update({
 	expandNestedRepliesByDefault: true,

@@ -135,8 +135,8 @@ const panels = [
 		id: 'performance',
 		groupId: 'system-data',
 		title: '性能设置',
-		description: '调整批量、保留、预加载与请求上限，自动适配设备和网络。',
-		keywords: ['预加载', '并发', '限流', '缓存', '滚动', '资源'],
+		description: '提供浏览器 DoH 配置指引；调整批量、保留、预加载与请求上限，自动适配设备和网络。',
+		keywords: ['预加载', '并发', '限流', '缓存', '滚动', '资源', '联网', 'dns', 'doh', 'ech', 'cf盾', '一摩尔氚'],
 	},
 	{
 		id: 'logs',

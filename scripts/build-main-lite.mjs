@@ -271,6 +271,7 @@ if (mode === 'debug') {
 		'    window, unsafeWindow: typeof unsafeWindow === "undefined" ? window : unsafeWindow,\n' +
 		'    GM: typeof GM === "undefined" ? undefined : GM,\n' +
 		'    GM_info: typeof GM_info === "undefined" ? undefined : GM_info,\n' +
+		'    readerExtensionSiteAccess: globalThis.__LDP_EXTENSION_SITE_ACCESS__,\n' +
 		`    ${bindings.join(',\n    ')}\n` +
 		'  }), __LDP_LOCAL_STYLES__.reader, __LDP_LOCAL_STYLES__.katex);\n';
 	await writeFile(path.join(projectRoot, STANDALONE_OUTPUT_PATH), standaloneArtifact);

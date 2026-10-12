@@ -4,7 +4,7 @@ description: 汇总全部设置项、范围、默认值、生效时机和数据�
 feature_ids: ["SET-012", "SET-013", "SET-014", "SET-015", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021", "DATA-006", "DATA-007"]
 source_anchors: ["lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree.ts","lite/src/network/request-scheduler.ts","lite/src/dom/reply-tree-repository.ts","lite/src/post/boost-copy-rule.ts","lite/src/settings/reader-settings-controller.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts","lite/src/sync/reader-webdav-model.ts","lite/src/sync/reader-webdav-offline-topic-port.ts"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshots/guide-03-image-settings-v1.5.0.png", "/screenshots/guide-04-font-settings-v1.5.0.png", "/screenshots/guide-05-layout-settings-v1.5.0.png", "/screenshots/guide-07-appearance-settings-v1.5.0.png", "/screenshots/guide-11-request-flow-v1.5.0.png", "/screenshots/guide-13-data-management-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png", "/screenshots/guide-32-webdav-sync-v1.5.0.png"]
@@ -148,6 +148,7 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 | 启用深层回复阅读 | 开/关 | 开 |
 | 深层回复展示方式 | 完整讨论/树状嵌套 2–5 层 | 完整讨论 |
 | 从楼层列表隐藏二级回复 | 开/关 | 开 |
+| 默认显示隐藏楼层头像 | 开/关；三角可临时收起，超过 10 个用“+N”查看 | 开 |
 | Boost 末尾内容 | 数字递增/固定文字 | 数字递增 |
 
 ## 快捷方式
@@ -166,9 +167,13 @@ screenshots: ["/screenshots/guide-02-settings-overview-v1.5.0.png", "/screenshot
 
 ![适用站点面板中的自定义 HTTPS Discourse 验证入口](/screenshots/guide-28-applicable-sites-v1.5.0.png)
 
-<p class="image-caption">自定义站点必须使用 HTTPS 并通过 Discourse 能力验证；添加只保存识别兜底，不会修改脚本管理器的域名匹配或授予额外权限。</p>
+<p class="image-caption">自定义站点必须使用 HTTPS 并通过 Discourse 能力验证；Chrome 扩展版会请求当前域名的精确权限，userscript 版只保存识别兜底。</p>
 
 Loader 默认只匹配 21 个内置社区。其他标准 HTTPS Discourse 需先由脚本管理器允许当前域名；脚本本地识别成功后会弹窗询问是否保存，也可输入域名或 HTTPS 网址匿名验证公开站点信息。保存项只作识别兜底，不会自行扩大 `@match`；验证失败或超时不会写入配置。
+
+Tampermonkey 脚本菜单中的“添加适用站点 / Match”会直接打开此面板。验证保存成功后，每个保存项会显示应添加到“用户匹配”的完整 `https://域名/*` 规则，并可用“复制规则”按钮写入剪贴板；面板同时提示进入 Tampermonkey“用户匹配”的步骤。该入口不拥有改写 Tampermonkey 匹配权限的能力；剪贴板不可用时只隐藏复制按钮，规则文本仍可见可手动复制。
+
+Chrome 扩展版会在提交时请求当前 `https://域名/*` 的浏览器原生权限，确认后动态注册 Lite 内容脚本；刷新目标站点即可运行。移除站点会同步注销并撤销该域名权限。
 
 ## 搜索与保存
 

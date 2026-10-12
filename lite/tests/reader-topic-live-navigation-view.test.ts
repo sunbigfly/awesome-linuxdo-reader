@@ -181,3 +181,80 @@ assert(
 	String(template.liveUpdateLabel.textContent) === '',
 	'Topic 销毁必须复位稳定 Shell 胶囊并释放 listener',
 );
+
+const avatarChanges = new Signal<TopicLiveChange<object, TestPost>>();
+let createdAvatars = 0;
+let releasedAvatars = 0;
+const previewed: number[] = [];
+const openedDiscussions: number[] = [];
+const overflowBatches: number[][] = [];
+const unexpectedNavigation: number[] = [];
+const avatarController = new ReaderTopicLiveNavigationController({
+	live: { changes: avatarChanges },
+	navigation: {
+		async navigate(request) {
+			unexpectedNavigation.push(request.postNumber);
+			return { status: 'unavailable' as const, postNumber: discoursePostNumber(request.postNumber),
+				source: request.source, rootPostNumber: null, mounted: false };
+		},
+	},
+});
+const avatarView = new ReaderTopicLiveNavigationView({
+	navigation: avatarController,
+	elements: {
+		root: template.liveUpdate, jump: template.liveUpdateJump,
+		label: template.liveUpdateLabel, dismiss: template.liveUpdateDismiss,
+	},
+	replyAvatars: {
+		createReplyAvatar(postNumber) {
+			createdAvatars += 1;
+			const avatar = document.createElement('button');
+			avatar.dataset.readerContextHiddenPost = String(postNumber);
+			return avatar;
+		},
+		releaseReplyAvatar() { releasedAvatars += 1; },
+		previewReplyAvatar(postNumber) { previewed.push(postNumber); },
+		async openReplyDiscussion(postNumber) { openedDiscussions.push(postNumber); },
+		showReplyAvatarOverflow(postNumbers, anchor) {
+			overflowBatches.push([...postNumbers]);
+			anchor.setAttribute('aria-expanded', 'true');
+		},
+		dismissReplyAvatarSurfaces() {},
+	},
+});
+const emitAvatarPost = (postNumber: number): void => {
+	avatarChanges.emit({
+		kind: 'post', postId: discoursePostId(20_000 + postNumber),
+		post: { id: 20_000 + postNumber, post_number: postNumber }, created: true, wasKnown: false,
+	});
+};
+emitAvatarPost(2);
+const stableAvatar = template.liveUpdate.querySelector<HTMLElement>('[data-reader-context-hidden-post="2"]')!;
+for (let postNumber = 3; postNumber <= 251; postNumber += 1) emitAvatarPost(postNumber);
+const avatarMore = template.liveUpdate.querySelector<HTMLButtonElement>('.ldp-hidden-reply-more')!;
+assert(
+	template.liveUpdate.querySelectorAll('[data-reader-context-hidden-post]').length === 10 &&
+		createdAvatars === 10 && avatarMore.textContent === '+240' &&
+		String(template.liveUpdateLabel.textContent) === '' && template.liveUpdateJump.hidden &&
+		template.liveUpdate.querySelector('.ldp-live-reply-avatar-strip')?.getAttribute('aria-label') === '新回复，250 个楼层',
+	'阅读中大量新回复只能显示最多 10 个头像和准确的 +N 汇总，不得平铺或重新物化已有头像',
+);
+stableAvatar.dispatchEvent(new document.defaultView!.Event('mouseover', { bubbles: true }));
+stableAvatar.click();
+avatarMore.click();
+assert(
+	previewed[0] === 2 && openedDiscussions[0] === 2 && unexpectedNavigation.length === 0 &&
+		overflowBatches[0]?.length === 240 && overflowBatches[0]?.[0] === 12,
+	'新回复头像必须复用发言预览和完整讨论；+N 只把其余头像交给竖向浮窗',
+);
+emitAvatarPost(252);
+assert(
+	template.liveUpdate.querySelector('[data-reader-context-hidden-post="2"]') === stableAvatar &&
+		createdAvatars === 10 && overflowBatches.at(-1)?.length === 241,
+	'新消息继续到达时必须保留正在预览的头像锚点，并更新已打开溢出列表的数量',
+);
+avatarController.dismiss();
+assert(template.liveUpdate.hidden && Number(releasedAvatars) === 10,
+	'关闭新回复提示必须释放有限头像及其浮窗，不能遗留已读绑定');
+avatarView.destroy();
+avatarController.destroy();

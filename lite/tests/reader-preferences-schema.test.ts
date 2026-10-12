@@ -9,6 +9,7 @@ import {
 	normalizeReaderPreferences,
 	prepareStoredReaderPreferences,
 } from '../src/state/reader-preferences-schema.js';
+import { readerWebDavPreferenceRecordMatchesSchema } from '../src/sync/reader-webdav-category-ports.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -102,6 +103,7 @@ const expectedKeys = [
 	'aggregateDescendantReplies',
 	'inlineReplyTreeMaxDepth',
 	'hideNestedReplyFloors',
+	'showHiddenReplyAvatarsByDefault',
 	'jumpHighlightColor',
 	'jumpHighlightRadius',
 	'jumpHighlightBorderWidth',
@@ -121,6 +123,7 @@ assert(
 const resetValue = createReaderPreferencesResetValue(defaults, Object.freeze({
 	...defaults,
 	themeMode: 'dark',
+	showHiddenReplyAvatarsByDefault: false,
 	unwantedTopicFilterEnabled: true,
 	unwantedTopicFilterCategories: Object.freeze(['开发调优']),
 	unwantedTopicFilterLabels: Object.freeze(['高级推广']),
@@ -130,6 +133,7 @@ const resetValue = createReaderPreferencesResetValue(defaults, Object.freeze({
 }));
 assert(
 	resetValue.themeMode === defaults.themeMode &&
+	resetValue.showHiddenReplyAvatarsByDefault &&
 	resetValue.unwantedTopicFilterEnabled &&
 	resetValue.unwantedTopicFilterCategories[0] === '开发调优' &&
 	resetValue.unwantedTopicFilterLabels[0] === '高级推广' &&
@@ -592,14 +596,15 @@ const codec = createReaderPreferencesConfigCodec({
 });
 const exported = codec.export({
 	...defaults,
+	showHiddenReplyAvatarsByDefault: false,
 	performancePageSize: 999,
 	hostTopicPreheatEnabled: false,
 	performanceSuspendHostTurnstileInBackground: true,
 	unknown: true,
 });
 assert(
-	exported.settingsCount === 92 &&
-	Object.keys(exported.settings).length === 92 &&
+	exported.settingsCount === 93 &&
+	Object.keys(exported.settings).length === 93 &&
 	exported.settings.performancePageSize === 64 &&
 	exported.settings.hostTopicPreheatEnabled === false &&
 	exported.settings.hostTopicPreheatPostCount === 24 &&
@@ -609,7 +614,17 @@ assert(
 		.bookmarks.backgroundRequestsPerMinute === 40 &&
 	exported.settings.performanceSuspendHostTurnstileInBackground === true &&
 	!Object.hasOwn(exported.settings, 'unknown'),
-	'真实配置 codec 必须复用同一 92 字段 schema',
+	'真实配置 codec 必须复用同一 93 字段 schema',
+);
+assert(
+	defaults.showHiddenReplyAvatarsByDefault &&
+		normalizeReaderPreferences({}, environment).showHiddenReplyAvatarsByDefault &&
+		codec.import(exported).showHiddenReplyAvatarsByDefault === false &&
+		readerWebDavPreferenceRecordMatchesSchema(defaults, 'showHiddenReplyAvatarsByDefault', false,
+			(value) => normalizeReaderPreferences(value, environment)) &&
+		!readerWebDavPreferenceRecordMatchesSchema(defaults, 'showHiddenReplyAvatarsByDefault', 'false',
+			(value) => normalizeReaderPreferences(value, environment)),
+	'旧配置缺省必须常显头像，显式关闭必须通过配置往返和 WebDAV 布尔值校验且拒绝非布尔值',
 );
 const beforePerformanceRuntimeSettings = Object.fromEntries(
 	Object.entries(defaults).filter(([key]) => ![

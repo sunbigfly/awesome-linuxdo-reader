@@ -4,7 +4,7 @@ description: 理解 userscript 权限、WebDAV 凭据与同步边界、LDC 只�
 feature_ids: ["MEDIA-014", "USER-006", "DATA-004", "DATA-005", "DATA-006", "DATA-007", "MONITOR-005", "TROUBLE-005"]
 source_anchors: ["lite/src/translation/reader-translation-controller.ts","lite/src/translation/translation-request-adapter.ts","lite/src/cache/response-repository.ts","lite/src/state/reader-settings-config-manager.ts","lite/src/userscript/browser-userscript-environment.ts","lite/src/network/request-observer.ts","lite/src/sync/reader-webdav-client.ts","lite/src/sync/reader-webdav-config-repository.ts","lite/src/sync/reader-webdav-offline-topic-port.ts","lite/src/archive/reader-topic-offline-artifact-repository.ts","lite/src/font/reader-font-catalog.ts","lite/src/font/reader-imported-font-store.ts","lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
@@ -18,12 +18,13 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 
 ## userscript 元数据
 
-当前 `1.6.6`：
+当前 `1.6.7`：
 
 | 字段 | 值 | 用途 |
 | --- | --- | --- |
 | `@match` | 21 个内置社区 | Loader 不在所有 HTTPS 页面运行；其他域名须由脚本管理器另行授权匹配 |
 | `@grant` | `GM_getValue`、`GM_setValue` | 保存设置、自定义站点和同账号最近一次 LDC 成功缓存 |
+| `@grant` | `GM_registerMenuCommand`、`GM_unregisterMenuCommand` | 在脚本菜单提供“添加适用站点 / Match”入口，并在 Reader 销毁时注销 |
 | `@grant` | `GM_xmlhttpRequest` | 检测自定义站点、读取 LDC 只读账户摘要、访问用户配置的 HTTPS WebDAV、获取允许的跨域公开资源，以及执行用户主动开启的正文翻译 |
 | `@grant` | `GM_addElement` | 在用户实际选择精选 Google Font 时追加对应样式表，不因浏览字体目录批量预取 |
 | `@grant` | `GM_getResourceText` | 读取发布版样式资源 |
@@ -32,6 +33,8 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 | `@run-at` | `document-start` | 在 SPA 和页面初始化前建立必要边界 |
 
 安装时脚本管理器会展示权限。若未来新增 GM API 或跨域目标，项目必须同步更新源码、功能目录和本页。
+
+Chrome 扩展版把 `https://*/*` 声明为 `optional_host_permissions` 的可申请范围，但不会因此在安装时取得所有 HTTPS 网站权限。用户在“适用站点”提交一个域名后，Chrome 只询问并授予对应的 `https://域名/*`；扩展随后注册同范围的 Lite 内容脚本，移除站点时一并注销并撤销。
 
 ## 外部依赖
 
@@ -77,7 +80,7 @@ LDC 面板通过显式声明的 `@connect credit.linux.do` 只读取当前登录
 - 译文进入最多 240 条的中央 Section 缓存，不进入设置导出；只有用户单独启用 WebDAV 的“已翻译 Section 缓存”类别后才跨设备同步，且不携带原文。
 - AI 服务 API Key 保存在脚本专属配置；启用 WebDAV 的“AI 服务集合”时，Key 使用当前 WebDAV 应用密码经 PBKDF2 派生密钥后加密，其他配置明文同步。更换应用密码后，旧设备需使用加密时的密码才能解密。
 - 主动获取供应商模型或打开“公共模型能力查询”且本地缓存缺失/过期时，脚本会匿名读取固定的 `models.dev/models.json` 与 OpenRouter 公共模型目录；请求不携带供应商 API Key，也不发送当前模型 ID。公共目录缓存在本机脚本存储中，不写入 WebDAV。
-- 对脚本管理器另行允许的未知域名，自动识别只检查当前页面的 Discourse 原生模块和 DOM 标志，不发送网络请求；识别成功会先询问用户，再保存为自定义站点。只有用户在设置中主动手动验证时，才向输入的 HTTPS 域名匿名请求公开的 `/site/basic-info.json`，且不附带当前论坛 Cookie。保存自定义站点不会自行扩大 `@match`。
+- 对脚本管理器另行允许的未知域名，自动识别只检查当前页面的 Discourse 原生模块和 DOM 标志，不发送网络请求；识别成功会先询问用户，再保存为自定义站点。只有用户在设置中主动手动验证时，才向输入的 HTTPS 域名匿名请求公开的 `/site/basic-info.json`，且不附带当前论坛 Cookie。userscript 保存自定义站点不会自行扩大 `@match`；Chrome 扩展版则在原生授权后只注册用户确认的精确域名。
 - 第三方翻译服务和目标论坛仍受各自隐私政策、可用性与地区网络限制约束。
 
 ## 截图与问题报告

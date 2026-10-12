@@ -84,6 +84,9 @@ import {
 import {
 	readerPreferencesTopicActionRailAdapter,
 } from '../post/reader-topic-action-rail.js';
+import type {
+	ReaderShareSurfacePort,
+} from '../post/reader-share-action-coordinator.js';
 import {
 	readerPreferencesUnwantedTopicFilterAdapter,
 	readerUnwantedTopicFilterPortMatch,
@@ -388,6 +391,10 @@ function createRuntimeStage(
 	customSites: Readonly<{
 		readonly repository: ReaderCustomSiteRepository;
 		readonly probe: ReaderDiscourseSiteProbeTransportPort | null;
+		readonly siteAccess: ReturnType<
+			BrowserUserscriptEnvironment['createCustomSiteAccess']
+		>;
+		readonly clipboard: Pick<ReaderShareSurfacePort, 'copyText'>;
 		readonly translation: ReaderTranslationConfigRepository | null;
 		readonly webDav: Readonly<{
 			readonly client: ReaderWebDavClient;
@@ -1102,6 +1109,17 @@ function createRuntimeStage(
 		},
 		onReady(runtime, context, _settings, settingsView, _layout, appearance, font) {
 			state.runtime = runtime;
+			const unregisterSitesMenu = settingsView
+				? environment.registerMenuCommand(
+					'添加适用站点 / Match',
+					() => {
+						settingsView.open('sites');
+						runtime.feedback.show(
+							'已打开适用站点；验证保存后请按页面提示添加用户匹配',
+						);
+					},
+				)
+				: null;
 			void onboardDetectedDiscourseSite({
 				hostname: document.location.hostname,
 				detection: applicationContext.host.detection,
@@ -1445,6 +1463,7 @@ function createRuntimeStage(
 			// 只读预热宿主 service/module；不提前打开回复框或读取用户草稿。
 			runtime.composer.warmReply();
 			return () => {
+				unregisterSitesMenu?.();
 				unbindComposerWindow();
 				composerWindow.destroy();
 				embeddedReload?.destroy();
@@ -1557,6 +1576,7 @@ export function startMainLiteUserscript(
 	const customSiteRepository = new ReaderCustomSiteRepository({
 		storage: valueStorage,
 	});
+	const customSiteAccess = environment.createCustomSiteAccess();
 	const translation = valueStorage
 		? new ReaderTranslationConfigRepository({ storage: valueStorage })
 		: null;
@@ -1660,6 +1680,8 @@ export function startMainLiteUserscript(
 				{
 					repository: customSiteRepository,
 					probe: customSiteProbe,
+					siteAccess: customSiteAccess,
+					clipboard: environment.createShareSurface(),
 					translation,
 					webDav,
 				},

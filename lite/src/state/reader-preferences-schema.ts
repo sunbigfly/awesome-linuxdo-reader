@@ -211,6 +211,7 @@ export interface ReaderPreferences {
 	readonly aggregateDescendantReplies: boolean;
 	readonly inlineReplyTreeMaxDepth: number;
 	readonly hideNestedReplyFloors: boolean;
+	readonly showHiddenReplyAvatarsByDefault: boolean;
 	readonly jumpHighlightColor: string;
 	readonly jumpHighlightRadius: number;
 	readonly jumpHighlightBorderWidth: number;
@@ -1560,6 +1561,7 @@ export function createReaderPreferencesDefaults(
 		aggregateDescendantReplies: true,
 		inlineReplyTreeMaxDepth: INLINE_REPLY_TREE_DEFAULT_DEPTH,
 		hideNestedReplyFloors: true,
+		showHiddenReplyAvatarsByDefault: true,
 		jumpHighlightColor: JUMP_HIGHLIGHT_DEFAULTS.color,
 		jumpHighlightRadius: JUMP_HIGHLIGHT_DEFAULTS.radius,
 		jumpHighlightBorderWidth: JUMP_HIGHLIGHT_DEFAULTS.borderWidth,
@@ -1829,6 +1831,8 @@ export function normalizeReaderPreferences(
 			Math.max(1, depth || INLINE_REPLY_TREE_DEFAULT_DEPTH),
 		),
 		hideNestedReplyFloors: source.hideNestedReplyFloors === true,
+		showHiddenReplyAvatarsByDefault:
+			source.showHiddenReplyAvatarsByDefault !== false,
 		jumpHighlightColor: /^#[0-9a-f]{6}$/.test(jumpColor)
 			? jumpColor
 			: JUMP_HIGHLIGHT_DEFAULTS.color,

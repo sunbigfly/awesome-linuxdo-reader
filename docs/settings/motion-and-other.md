@@ -4,7 +4,7 @@ description: 配置跳转提示、加载动画、历史导航、退出方式、�
 feature_ids: ["READ-007", "READ-014", "ACTION-006", "SET-010", "SET-011", "SET-016", "SET-017", "SET-018", "SET-019"]
 source_anchors: ["lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-scroll-adapter.ts","lite/src/post/boost-copy-rule.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-08-motion-settings-v1.5.0.png", "/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png"]
@@ -62,6 +62,7 @@ screenshots: ["/screenshots/guide-08-motion-settings-v1.5.0.png", "/screenshots/
 - 启用深层回复阅读：允许继续阅读更深分支。
 - 深层回复展示方式：直接进入完整讨论，或先显示 2–5 层主信息流树状嵌套。
 - 从楼层列表隐藏二级回复：收纳为参与者头像标记，跳转仍可定位。
+- 默认显示隐藏楼层头像：默认开启，头像与“隐藏楼层”分隔线一起显示；可临时收起，最多 10 个头像，更多通过“+N”的竖向列表查看。悬停或触屏长按预览发言，直接点击进入完整讨论；细色环区分已读、未读和未知状态。
 
 主信息流树状嵌套超出所选深度后仍由完整讨论兜底；完整讨论本身按真实父子关系无限递归，窗口变窄时只停止继续增加缩进。关闭父回复下展开时，设置中心会同步处理关联开关。
 

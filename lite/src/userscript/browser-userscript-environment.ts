@@ -51,6 +51,9 @@ import {
 	type ReaderWebDavRequestOptions,
 	type ReaderWebDavRequestPort,
 } from '../sync/reader-webdav-client.js';
+import type {
+	ReaderCustomSiteAccessPort,
+} from '../settings/reader-custom-site-settings-form.js';
 type HlsConstructor = {
 	new (): UnknownRecord;
 	readonly isSupported?: unknown;
@@ -300,6 +303,75 @@ export class BrowserUserscriptEnvironment {
 				>,
 			delete: (name: string) =>
 				remove.call(storage, name) as Promise<boolean>,
+		});
+	}
+
+	registerMenuCommand(
+		caption: string,
+		listener: () => void,
+	): (() => void) | null {
+		const modern = objectRecord(this.#userscriptGlobal.GM);
+		const modernRegister = modern?.registerMenuCommand;
+		const legacyRegister = this.#userscriptGlobal.GM_registerMenuCommand;
+		const owner = typeof modernRegister === 'function'
+			? modern
+			: this.#userscriptGlobal;
+		const register = typeof modernRegister === 'function'
+			? modernRegister
+			: legacyRegister;
+		if (!owner || typeof register !== 'function') return null;
+		let commandId: Promise<unknown>;
+		try {
+			commandId = Promise.resolve(register.call(
+				owner,
+				String(caption),
+				listener,
+			));
+		} catch {
+			return null;
+		}
+		let active = true;
+		return () => {
+			if (!active) return;
+			active = false;
+			const modernUnregister = modern?.unregisterMenuCommand;
+			const legacyUnregister =
+				this.#userscriptGlobal.GM_unregisterMenuCommand;
+			const unregisterOwner = typeof modernUnregister === 'function'
+				? modern
+				: this.#userscriptGlobal;
+			const unregister = typeof modernUnregister === 'function'
+				? modernUnregister
+				: legacyUnregister;
+			if (!unregisterOwner || typeof unregister !== 'function') return;
+			void commandId.then((id) => {
+				unregister.call(unregisterOwner, id);
+			}).catch(() => {});
+		};
+	}
+
+	createCustomSiteAccess(): ReaderCustomSiteAccessPort | null {
+		// 宿主可能以两种名字注入同一桥接：本地/扩展 standalone 产物用
+		// readerExtensionSiteAccess；扩展 compat shim 直接暴露
+		// __LDP_EXTENSION_SITE_ACCESS__。两者指向同一对象，缺失时返回 null
+		// 让设置面板回退到“手动添加用户匹配”的旧路径。
+		const access = objectRecord(
+			this.#userscriptGlobal.readerExtensionSiteAccess ??
+			this.#userscriptGlobal.__LDP_EXTENSION_SITE_ACCESS__,
+		);
+		const request = access?.request;
+		const remove = access?.remove;
+		if (
+			!access ||
+			typeof request !== 'function' ||
+			typeof remove !== 'function'
+		) return null;
+		return Object.freeze({
+			request: async (host: string) =>
+				Boolean(await request.call(access, String(host))),
+			remove: async (host: string) => {
+				await remove.call(access, String(host));
+			},
 		});
 	}
 

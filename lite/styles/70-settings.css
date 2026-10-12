@@ -5501,6 +5501,259 @@
   line-height: 1.25;
 }
 
+.ldp-network-content {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 10px 14px 14px;
+  font-size: var(--ldp-font-ui);
+}
+
+.ldp-network-heading {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ldp-network-preset {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.ldp-network-preset-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ldp-accent) 9%, var(--ldp-canvas));
+  color: var(--ldp-accent);
+}
+
+.ldp-network-preset-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ldp-network-preset-name {
+  color: var(--ldp-ink);
+  font-weight: 600;
+}
+
+.ldp-network-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--ldp-border);
+  border-radius: 4px;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  line-height: 1.3;
+}
+
+.ldp-network-heading > small,
+.ldp-network-note,
+.ldp-network-status,
+.ldp-network-source {
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  line-height: 1.5;
+}
+
+.ldp-network-guide {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--ldp-border);
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-surface-muted);
+}
+
+.ldp-network-guide[hidden] {
+  display: none;
+}
+
+.ldp-network-address-controls {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--ldp-border);
+  border-radius: var(--ldp-radius-sm);
+  background: var(--ldp-canvas);
+}
+
+.ldp-network-address-controls > .ldp-network-input {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: var(--ldp-font-ui);
+  text-overflow: ellipsis;
+}
+
+.ldp-network-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.ldp-network-copy,
+.ldp-network-toggle {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--ldp-border);
+  border-radius: 4px;
+  background: var(--ldp-surface-muted);
+  color: var(--ldp-ink);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ldp-network-copy[data-network-copy="doh"] {
+  border-color: var(--ldp-accent);
+  background: var(--ldp-accent);
+  color: var(--ldp-accent-contrast, #fff);
+}
+
+.ldp-network-copy:hover:not(:disabled) {
+  filter: brightness(.96);
+}
+
+.ldp-network-copy:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.ldp-network-toggle {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ldp-accent);
+}
+
+.ldp-network-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ldp-network-toggle[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.ldp-network-copy:focus-visible,
+.ldp-network-toggle:focus-visible,
+.ldp-network-source:focus-visible {
+  outline: 2px solid var(--ldp-accent);
+  outline-offset: 2px;
+}
+
+.ldp-network-browser-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 170px);
+  align-items: center;
+  gap: 10px;
+}
+
+.ldp-network-browser-label {
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+}
+
+.ldp-network-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ldp-network-step {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.ldp-network-step::before {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ldp-accent) 10%, var(--ldp-canvas));
+  color: var(--ldp-accent);
+  font-size: var(--ldp-font-sm);
+  font-weight: 600;
+  content: attr(data-network-step);
+}
+
+.ldp-network-step-body {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ldp-network-step-title {
+  color: var(--ldp-ink);
+  font-size: var(--ldp-font-ui);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ldp-network-step-copy,
+.ldp-network-managed-note {
+  margin: 0;
+  color: var(--ldp-ink-muted);
+  font-size: var(--ldp-font-sm);
+  line-height: 1.5;
+}
+
+.ldp-network-managed-note {
+  padding-top: 10px;
+  border-top: 1px solid var(--ldp-border);
+}
+
+.ldp-network-note {
+  margin: 0;
+}
+
+.ldp-network-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ldp-ink-muted);
+  text-decoration: none;
+}
+
+.ldp-network-source:hover {
+  color: var(--ldp-accent);
+  text-decoration: underline;
+}
+
+.ldp-network-source > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ldp-network-status:empty {
+  display: none;
+}
+
+.ldp-network-input,
+.ldp-network-browser,
 .ldp-performance-control > input,
 .ldp-image-scale-custom,
 .ldp-lightbox-description-height,

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "1.6.6",
+  "sourceVersion": "1.6.7",
   "entryModuleId": "src/userscript/main-lite-entry.js",
   "limits": {
     "greasyForkHardLimit": 2097152,
@@ -14,8 +14,8 @@
     "vendorMinified": true,
     "sharedHelperDeclarations": 10
   },
-  "modules": 306,
-  "projectTotalExecutableBytes": 5257967,
+  "modules": 310,
+  "projectTotalExecutableBytes": 5299372,
   "libraries": [
     {
       "name": "main-lite-core",
@@ -24,9 +24,9 @@
         "work/greasyfork-lite/libraries/mian-lite-core.js"
       ],
       "description": "应用、Shell、主题、流、布局与 userscript 运行核心",
-      "modules": 107,
-      "bytes": 1740789,
-      "sha256": "e7ac617450f592f9001dbdf3dcc506041ac99efb5590d1f32526d4a6ccaf51b6"
+      "modules": 110,
+      "bytes": 1767252,
+      "sha256": "43de2a184cc1aa31fff6031b123222df39cfdd93547a856e667795e818d1f9a4"
     },
     {
       "name": "main-lite-platform",
@@ -37,7 +37,7 @@
       "description": "缓存、集合、Discourse、网络、队列、同步、通知、监控与翻译平台模块",
       "modules": 77,
       "bytes": 1491680,
-      "sha256": "d302dee8fa9f58bc84ab897c476be7deaa5ab660ed900ea0f9eeb580d1ffadf4"
+      "sha256": "f733fccc5042455a2d9129abe8e71f2f3e7a434f8c2452dd86f2b1d94020819d"
     },
     {
       "name": "main-lite-features",
@@ -46,14 +46,14 @@
         "work/greasyfork-lite/libraries/mian-lite-features.js"
       ],
       "description": "媒体、互动、设置、用户与其他功能模块",
-      "modules": 122,
-      "bytes": 2022114,
-      "sha256": "feb27200aec1846ad496858b2fa877cd8335ce7eeab74bee5cb53d5da19eec1b"
+      "modules": 123,
+      "bytes": 2036974,
+      "sha256": "f95408421970c942533666a772e9d017a4ad222d9f7dd936f39cc95d2f7420a4"
     }
   ],
   "loaderTemplate": {
     "file": "work/greasyfork-lite/main-loader.template.user.js",
-    "bytes": 3384,
-    "sha256": "4d2608fd0488ea2919742ca9f49825fa27838e095e1416037248da3176308c1b"
+    "bytes": 3466,
+    "sha256": "8cbb4076c1c72bf81ac8ce49c67e3b2b0f83ddc16939263155cca882daf329d2"
   }
 }

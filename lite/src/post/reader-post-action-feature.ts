@@ -1726,7 +1726,8 @@ export class ReaderPostActionFeature<
 				actions,
 				actions.classList.contains('ldp-post-actions-expanded'),
 			);
-			actions.append(mobileActionsToggle);
+			// 收纳入口紧跟常用操作；隐藏工具在它后面占位，悬停不移动入口。
+			actions.insertBefore(mobileActionsToggle, contextActions);
 		}
 		if (!binding.contextHydrated) {
 			contextActions.replaceChildren();

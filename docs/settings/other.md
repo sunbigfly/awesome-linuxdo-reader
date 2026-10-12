@@ -4,7 +4,7 @@ description: 配置队列入口、历史、退出、键盘与鼠标快捷方式�
 feature_ids: ["CORE-006", "CORE-007", "READ-007", "READ-015", "ACTION-006", "ACTION-014", "COLLECT-007", "SET-016", "SET-017", "SET-018", "SET-019", "SET-020", "SET-021"]
 source_anchors: ["lite/src/queue/reader-open-queue-session.ts","lite/src/app/reader-application.ts","lite/src/history/reader-history-navigation-controller.ts","lite/src/topic/reader-topic-context-controller.ts","lite/src/post/boost-copy-rule.ts","lite/src/post/reader-topic-action-rail.ts","lite/src/collection/reader-unwanted-topic-filter.ts","lite/src/state/reader-preferences-schema.ts","lite/src/dom/reply-tree-repository.ts","lite/src/settings/reader-reading-settings-form.ts","lite/src/settings/reader-shortcut-settings-form.ts","lite/src/shell/reader-shortcut-controller.ts"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
 last_verified: 2026-08-18
 screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/guide-18-thread-context-v1.5.0.png", "/screenshots/guide-26-reading-navigation-v1.5.0.png", "/screenshots/guide-27-shortcuts-v1.5.0.png", "/screenshots/guide-28-applicable-sites-v1.5.0.png"]
@@ -106,6 +106,7 @@ screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/g
 | 启用深层回复阅读 | 允许使用完整讨论或主信息流树状嵌套 |
 | 深层回复展示方式 | 直接进入完整讨论，或先显示 2–5 层主信息流树状嵌套 |
 | 从楼层列表隐藏二级回复 | 将正式楼层收纳为参与者头像标记，跳转仍可定位 |
+| 默认显示隐藏楼层头像 | 默认开启；最多显示 10 个头像，超出用“+N”打开竖向列表；悬停或长按预览，点击进入完整讨论 |
 
 深层回复阅读建立在父回复下展开之上；关闭它仍可保留普通直属回复分页。主信息流超出所选深度后进入完整讨论；完整讨论按真实父子关系无限递归，窄窗口只停止继续缩进。默认继续使用完整讨论窗口，不改变已有用户的阅读方式。
 
@@ -130,5 +131,9 @@ screenshots: ["/screenshots/guide-12-other-features-v1.5.0.png", "/screenshots/g
 <p class="image-caption">在“适用站点”输入 HTTPS 论坛地址并验证 Discourse 证据，成功后才加入自定义站点；验证不会绕过目标站登录或权限。</p>
 
 Loader 默认只匹配 21 个内置社区。其他标准 HTTPS Discourse 需先在脚本管理器中为本脚本允许对应域名；脚本运行后会用当前页面的原生模块与 DOM 证据识别，并弹窗询问是否保存为自定义站点。也可以输入域名或完整网址并点击“验证并添加”；阅读器会匿名访问该站点的 `/site/basic-info.json`，检测到 Discourse 公开站点信息后保存为兼容兜底。已内置站点不需要重复添加，保存的域名可以在同一区域移除。
+
+在已匹配站点打开 Tampermonkey 的脚本菜单，可通过“添加适用站点 / Match”直接进入本面板。验证保存成功后，每个保存项会显示其精确的 `https://域名/*` 规则，并提供“复制规则”按钮把该规则写入剪贴板；面板同时给出进入 Tampermonkey“用户匹配”的步骤，粘贴并确认即可。脚本不会自行改写匹配权限。剪贴板不可用时复制按钮隐藏，规则文本仍可直接选取复制。
+
+Chrome 扩展版使用浏览器可选站点权限：点击“验证并添加”后，Chrome 会针对当前 `https://域名/*` 弹出一次原生授权；确认后扩展动态注册该域名的 Lite 内容脚本，刷新目标站点即可运行。移除保存项会同时注销内容脚本并撤销该域名权限。清单中的 `https://*/*` 只是可申请范围，不代表扩展已经取得全部网站权限。
 
 兼容兜底域名保存在脚本管理器的全局脚本存储中，只在本地自动识别失败时启用；它不会自行修改 `@match`，因此脚本管理器仍须允许目标域名运行。若目标不是 Discourse、拒绝访问公开接口或请求超时，阅读器不会保存。

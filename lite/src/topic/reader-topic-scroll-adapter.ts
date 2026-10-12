@@ -1,5 +1,6 @@
 import { LifecycleScope, type Cleanup } from '../kernel/lifecycle.js';
 import { eventElement } from '../dom/event-target.js';
+import { readPostViewOwnRegion } from '../dom/post-view-region.js';
 import type { PostNumber } from '../dom/reply-tree.js';
 import type { VirtualWindowInput } from '../stream/virtual-root-layout.js';
 import type {
@@ -112,8 +113,8 @@ function defaultResizeObserverFactory(
 /**
  * Topic 内唯一跳转高亮 owner。
  *
- * 复用现行 `.ldp-jump-highlight` CSS；同一 Topic 最多保留一个活动目标。首楼高亮区域只覆盖
- * 正文到动作区，并随 ResizeObserver 更新；销毁、换目标或 timer 到期均完整清理。
+ * 同一 Topic 最多保留一个活动目标。楼层高亮只覆盖自身内容，不包含子回复树，
+ * 并随 ResizeObserver 更新；销毁、换目标或 timer 到期均完整清理。
  */
 export class ReaderTopicJumpHighlightController {
 	readonly scope: LifecycleScope;
@@ -145,8 +146,8 @@ export class ReaderTopicJumpHighlightController {
 		this.clear();
 		const token = String(++this.#token);
 		target.classList.remove('ldp-jump-highlight');
-		target.style.removeProperty('--ldp-first-post-jump-highlight-height');
-		const anchor = this.#syncFirstPostRegion(target);
+		target.style.removeProperty('--ldp-post-jump-highlight-height');
+		const anchor = this.#syncPostRegion(target);
 		void target.offsetWidth;
 		target.dataset.jumpHighlightToken = token;
 		target.classList.add('ldp-jump-highlight');
@@ -156,7 +157,7 @@ export class ReaderTopicJumpHighlightController {
 					target.isConnected &&
 					target.dataset.jumpHighlightToken === token
 				) {
-					this.#syncFirstPostRegion(target);
+					this.#syncPostRegion(target);
 				}
 			})
 			: null;
@@ -190,49 +191,19 @@ export class ReaderTopicJumpHighlightController {
 		this.scope.destroy();
 	}
 
-	#syncFirstPostRegion(target: HTMLElement): HTMLElement | null {
-		if (target.dataset.postNumber !== '1') return null;
-		const actions = target.querySelector<HTMLElement>(
-			':scope > .ldp-post-body .ldp-reactions, :scope > .ldp-reactions',
-		);
-		const targetRect = target.getBoundingClientRect();
-		if (actions) {
-			const actionsRect = actions.getBoundingClientRect();
-			if (actionsRect.height > 0 && actionsRect.bottom > targetRect.top) {
-				this.#setFirstPostRegion(target, targetRect, actionsRect);
-				return actions;
-			}
-		}
-		const body = target.querySelector<HTMLElement>(
-			':scope > .ldp-post-body',
-		);
-		if (!body) return null;
-		this.#setFirstPostRegion(
-			target,
-			targetRect,
-			body.getBoundingClientRect(),
-		);
-		return body;
-	}
-
-	#setFirstPostRegion(
-		target: HTMLElement,
-		targetRect: DOMRect,
-		boundaryRect: DOMRect,
-	): void {
-		const height = Math.min(
-			targetRect.height,
-			Math.max(0, boundaryRect.bottom - targetRect.top),
-		);
+	#syncPostRegion(target: HTMLElement): HTMLElement | null {
+		if (!target.classList.contains('ldp-post')) return null;
+		const region = readPostViewOwnRegion(target);
 		target.style.setProperty(
-			'--ldp-first-post-jump-highlight-height',
-			`${Math.ceil(height)}px`,
+			'--ldp-post-jump-highlight-height',
+			`${Math.ceil(Math.max(0, region.rect.height))}px`,
 		);
+		return region.boundary;
 	}
 
 	#clearTarget(target: HTMLElement): void {
 		target.classList.remove('ldp-jump-highlight');
-		target.style.removeProperty('--ldp-first-post-jump-highlight-height');
+		target.style.removeProperty('--ldp-post-jump-highlight-height');
 		delete target.dataset.jumpHighlightToken;
 	}
 }
@@ -917,7 +888,7 @@ export class ReaderTopicScrollAdapter {
 				finiteNonNegative(this.#scrollRoot.scrollTop);
 		}
 		const rootRect = this.#scrollRoot.getBoundingClientRect();
-		const targetRect = target.getBoundingClientRect();
+		const targetRect = readPostViewOwnRegion(target).rect;
 		const topInset = Math.min(
 			rootRect.height,
 			finiteNonNegative(this.#readTopInset()),

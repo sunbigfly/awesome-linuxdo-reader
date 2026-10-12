@@ -18,6 +18,7 @@ import {
 import {
 	ReaderReplyTreePresentation,
 } from '../src/topic/reader-reply-tree-preferences.js';
+import { bindReaderReplyAvatarInteractions } from '../src/topic/reader-reply-avatar-interactions.js';
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -170,6 +171,7 @@ const presentation = new ReaderReplyTreePresentation(replies.topology, {
 	aggregateDescendantReplies: true,
 	inlineReplyTreeMaxDepth: 2,
 	hideNestedReplyFloors: true,
+	showHiddenReplyAvatarsByDefault: false,
 });
 const navigated: number[] = [];
 const openedQuoteTargets: Array<Readonly<{
@@ -284,6 +286,9 @@ feature.connectQuoteSource({
 		return true;
 	},
 });
+const discussionOwnHeights = new Map<number, number>();
+const discussionSubtreeHeights = new Map<number, number>();
+let wholePostScrolls = 0;
 const render = (post: TestPost, view: PostView): void => {
 	view.slots.header.textContent = post.username;
 	const avatar = document.createElement('span');
@@ -300,7 +305,15 @@ const render = (post: TestPost, view: PostView): void => {
 	};
 	Object.defineProperty(view.slots.root, 'getBoundingClientRect', {
 		configurable: true,
-		value: () => rect(readPostTop(), 80),
+		value: () => rect(readPostTop(), discussionSubtreeHeights.get(post.post_number) ?? 80),
+	});
+	Object.defineProperty(view.slots.root, 'scrollIntoView', {
+		configurable: true,
+		value: () => { wholePostScrolls += 1; },
+	});
+	Object.defineProperty(view.slots.body, 'getBoundingClientRect', {
+		configurable: true,
+		value: () => rect(readPostTop() + 32, (discussionOwnHeights.get(post.post_number) ?? 80) - 32),
 	});
 	Object.defineProperty(avatar, 'getBoundingClientRect', {
 		configurable: true,
@@ -665,14 +678,51 @@ const hiddenReplyAvatar = hiddenList?.querySelector<HTMLButtonElement>(
 	'[data-reader-context-hidden-post="4"]',
 );
 assert(
-	hiddenReplyAvatar?.dataset.readerContextHiddenPost === '4',
-	'收纳回复入口必须保留 canonical 目标楼层',
+	hiddenReplyAvatar?.dataset.readerContextHiddenPost === '4' &&
+		hiddenReplyAvatar.getAttribute('aria-label')?.includes('完整讨论'),
+	'收纳回复入口必须保留 canonical 目标楼层，并明确提示在完整讨论中查看',
 );
-hiddenReplyAvatar.click();
-for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+const navigationCountBeforeHiddenReplies = navigated.length;
+for (const avatar of hiddenList.querySelectorAll<HTMLButtonElement>(
+	'[data-reader-context-hidden-post]',
+)) {
+	const postNumber = Number(avatar.dataset.readerContextHiddenPost);
+	avatar.click();
+	for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+	assert(
+		controller.snapshot().discussion?.rootPostNumber === 2 &&
+			controller.snapshot().discussion?.entries
+				.map((entry) => entry.postNumber).join(',') === '2,3,4' &&
+			modal.querySelector<HTMLElement>('.ldp-descendant-replies-layer')
+				?.hidden === false &&
+			surface.discussionDomOwner.view(discoursePostNumber(postNumber))
+				?.slots.root.isConnected &&
+			highlightedTargets.at(-1) === String(postNumber),
+		`隐藏楼层 #${postNumber} 的头像必须打开所属完整讨论浮窗并定位、高亮目标`,
+	);
+	assert(
+		navigated.length === navigationCountBeforeHiddenReplies &&
+			presentation.hiddenFloorRunAfter(1).join(',') === '2,3,4' &&
+			hiddenRunRoot.nextElementSibling === hiddenRunMarker,
+		'隐藏楼层入口不得触发时间轴跳转或改变主信息流的隐藏楼层投影',
+	);
+	controller.closeDiscussion();
+}
+presentation.update({ ...presentation.preferences, showHiddenReplyAvatarsByDefault: true });
+feature.syncProjection();
+const alwaysVisibleMarker = hiddenRunRoot.nextElementSibling as HTMLElement;
 assert(
-	navigated.at(-1) === 4,
-	'隐藏楼层头像必须与 main 一样交给唯一时间轴导航揭示目标楼层',
+	alwaysVisibleMarker.querySelector<HTMLElement>('[data-reader-context-hidden-list]')?.hidden === false &&
+		alwaysVisibleMarker.querySelector('.ldp-hidden-reply-label')?.textContent === '隐藏 3' &&
+		alwaysVisibleMarker.getAttribute('aria-label') === '3 个隐藏楼层' &&
+		alwaysVisibleMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 3,
+	'常显设置热应用必须立即在独立楼层分隔线上显示头像并明确标注隐藏楼层数量',
+);
+alwaysVisibleMarker.querySelector<HTMLButtonElement>('[data-reader-context-hidden-toggle]')!.click();
+feature.syncProjection();
+assert(
+	alwaysVisibleMarker.querySelector<HTMLElement>('[data-reader-context-hidden-list]')?.hidden === true,
+	'默认常显时仍须保留三角临时收起状态，普通投影同步不能强制重新展开',
 );
 const batchedRoot = document.createElement('article');
 batchedRoot.className = 'ldp-post';
@@ -686,6 +736,7 @@ const batchedFeature = new ReaderTopicContextFeature<TestPost>({
 	controller,
 	replies,
 	presentation: {
+		showHiddenReplyAvatarsByDefault: false,
 		postFilterKey: null,
 		postFilterMatches: () => true,
 		parentOf: () => null,
@@ -701,6 +752,13 @@ const batchedFeature = new ReaderTopicContextFeature<TestPost>({
 });
 batchedFeature.attachRoot(batchedRoot, 99);
 const batchedMarker = batchedRoot.nextElementSibling as HTMLElement;
+const overflowRequests: number[][] = [];
+batchedFeature.connectReplyAvatarSurface({
+	preview() {},
+	overflow(postNumbers) { overflowRequests.push([...postNumbers]); },
+	dismissPreview() {},
+	dismissFor() {},
+});
 assert(
 	batchedMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 0,
 	'250 个隐藏楼层在折叠状态下不得预建头像 DOM',
@@ -709,16 +767,17 @@ batchedMarker.querySelector<HTMLButtonElement>(
 	'[data-reader-context-hidden-toggle]',
 )!.click();
 assert(
-	batchedMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 100 &&
-		Boolean(batchedMarker.querySelector('[data-reader-context-hidden-more]')),
-	'展开超大隐藏楼层列表时必须按 Reddit more-comments 风格只实体化首批 100 个入口',
+	batchedMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 10 &&
+		batchedMarker.querySelector('[data-reader-context-hidden-more]')?.textContent === '+240',
+	'展开超大隐藏楼层列表时只能实体化最多 10 个头像，并准确汇总其余楼层',
 );
 batchedMarker.querySelector<HTMLButtonElement>(
 	'[data-reader-context-hidden-more]',
 )!.click();
 assert(
-	batchedMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 200,
-	'用户显式加载更多时必须只追加下一批 100 个入口',
+	batchedMarker.querySelectorAll('[data-reader-context-hidden-post]').length === 10 &&
+		overflowRequests[0]?.length === 240 && overflowRequests[0]?.[0] === 1_010,
+	'点击 +N 必须交给独立竖向列表浮窗，不得在分隔线上继续平铺头像',
 );
 batchedFeature.detachRoot(batchedRoot);
 assert(
@@ -1198,6 +1257,22 @@ Object.defineProperty(session, 'loadReplyBranches', {
 	value: undefined,
 });
 
+discussionSubtreeHeights.set(2, 4_800);
+const mainScrollBeforeDiscussionJump = scrollRoot.scrollTop;
+await surface.revealDiscussionPost(2);
+assert(
+	stableDiscussionList.scrollTop === 340 && wholePostScrolls === 0 && scrollRoot.scrollTop === mainScrollBeforeDiscussionJump,
+	'巨大子回复树的跳转必须只在讨论视口中居中本楼层的 80px 内容，不能滚动整棵子树或主阅读流',
+);
+discussionOwnHeights.set(2, 900);
+await surface.revealDiscussionPost(2);
+assert(
+	Number(stableDiscussionList.scrollTop) === 488 && wholePostScrolls === 0,
+	'本楼层自身带长图时必须露出楼层头部和正文起点，而不是滚到图片中间',
+);
+discussionOwnHeights.clear();
+discussionSubtreeHeights.clear();
+controller.closeDiscussion();
 const hiddenDiscussionReveal = await surface.revealDiscussionPost(4);
 const discussionLayer = modal.querySelector<HTMLElement>(
 	'.ldp-descendant-replies-layer',
@@ -1350,8 +1425,8 @@ assert(
 	controller.snapshot().discussion?.rootPostNumber === 2 &&
 	!discussionLayer.hidden &&
 	stableDiscussionList.scrollTop === 240 &&
-	stableDiscussionList.scrollLeft === 36,
-	'历史恢复必须复用同一 controller/surface，并用先读后写的单次锚点投影精确恢复二维讨论视口',
+	stableDiscussionList.scrollLeft === 0,
+	'历史恢复必须精确恢复纵向讨论锚点，并忽略旧版本的横向偏移',
 );
 const discussionPanel = discussionLayer.querySelector<HTMLElement>(
 	'.ldp-descendant-replies-window',
@@ -1398,13 +1473,13 @@ discussionResize.callback?.([
 ], {} as ResizeObserver);
 changes.emit({ source: 'layout-test' });
 assert(
-	discussionList.classList.contains('ldp-descendant-tree-pannable') &&
+	!discussionList.classList.contains('ldp-descendant-tree-pannable') &&
 	discussionList.style.getPropertyValue('--ldp-descendant-tree-width') ===
-		'404px' &&
+		'320px' &&
 	discussionList.style.getPropertyValue(
-		'--ldp-descendant-tree-pan-width',
-	) === '404px',
-	'窄窗深树必须扩展逻辑树宽并进入可横移状态，不能继续压缩正文或截断层级',
+		'--ldp-descendant-min-post-width',
+	) === '224px' && !surface.scrollDiscussionHorizontal(100),
+	'窄窗深树必须限制在实际内容宽度内，减少深层缩进并关闭横向滚动快捷键',
 );
 const dispatchPointer = (
 	target: Element,
@@ -1448,9 +1523,9 @@ dispatchPointer(discussionList, 'pointerup', {
 	clientY: 100,
 });
 assert(
-	discussionList.scrollLeft === 100 &&
+	discussionList.scrollLeft === 0 &&
 	!discussionList.classList.contains('ldp-descendant-tree-panning'),
-	`深树空白区域拖动必须只更新 discussion 横向 scroll，并在 pointerup 清理交互态：${discussionList.scrollLeft}/${discussionList.className}`,
+	'深树空白区域拖动不得启动横向平移或改变横向滚动位置',
 );
 const discussionHeader = discussionPanel.querySelector<HTMLElement>(
 	'.ldp-descendant-replies-header',
@@ -1510,6 +1585,47 @@ assert(
 );
 
 controller.closeDiscussion();
+const avatarCloseScope = scope.child();
+const avatarCloseStrip = document.createElement('div');
+const avatarCloseTarget = feature.createReplyAvatar(3);
+avatarCloseStrip.append(avatarCloseTarget);
+document.body.append(avatarCloseStrip);
+avatarCloseScope.add(bindReaderReplyAvatarInteractions(
+	avatarCloseStrip, feature, avatarCloseScope,
+));
+const originalActiveElement = Object.getOwnPropertyDescriptor(document, 'activeElement');
+Object.defineProperty(document, 'activeElement', {
+	configurable: true,
+	value: avatarCloseTarget,
+});
+let restoredAvatarFocusCount = 0;
+avatarCloseTarget.focus = () => {
+	restoredAvatarFocusCount += 1;
+	avatarCloseTarget.dispatchEvent(new window.Event('focusin', { bubbles: true }));
+};
+for (const closeBy of ['blank', 'button'] as const) {
+	avatarCloseTarget.dispatchEvent(new window.Event('mouseover', { bubbles: true }));
+	assert(document.querySelector('.ldp-hidden-reply-preview'),
+		'关闭联动用例必须先通过头像悬停打开真实预览 owner');
+	avatarCloseTarget.click();
+	for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+	assert(controller.snapshot().discussion && !discussionLayer.hidden &&
+		!document.querySelector('.ldp-hidden-reply-preview'),
+		'头像点击必须进入完整讨论并收起原预览');
+	if (closeBy === 'blank') discussionLayer.click();
+	else discussionLayer.querySelector<HTMLButtonElement>(
+		'.ldp-descendant-replies-close',
+	)!.click();
+	assert(controller.snapshot().discussion === null && discussionLayer.hidden &&
+		!document.querySelector('.ldp-hidden-reply-preview') &&
+		avatarCloseTarget.getAttribute('aria-expanded') === 'false',
+		`通过 ${closeBy} 关闭讨论后，恢复头像焦点也不能残留或重开发言气泡`);
+}
+assert(restoredAvatarFocusCount === 2, '关闭讨论必须保留两次键盘焦点恢复');
+if (originalActiveElement) Object.defineProperty(document, 'activeElement', originalActiveElement);
+else Reflect.deleteProperty(document, 'activeElement');
+avatarCloseScope.destroy();
+avatarCloseStrip.remove();
 const shadowPortal = document.createElement('div');
 shadowPortal.dataset.ldpReaderPortal = 'mian-lite';
 document.body.append(shadowPortal);

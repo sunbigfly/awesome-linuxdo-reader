@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.6
+version: 1.6.7
 status: current
-last_verified: 2026-09-14
+last_verified: 2026-10-12
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,16 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.7 — 讨论上下文、阅读设置与站点授权
+
+发布日期：2026-10-12。
+
+- 调整讨论树和直属回复的头像展示，支持通过头像查看或跳转回复，并改善收起、换行和已读状态的显示。
+- 楼层跳转和高亮只覆盖当前楼层自身内容，避免把嵌套回复纳入定位范围。
+- 整理阅读动画与互动设置，补充浏览器 DoH 配置指引。
+- 未打包 Chrome 扩展支持按域名申请自定义站点权限；移除站点时注销内容脚本并撤销对应权限。userscript 版提供脚本管理器授权指引。
+- 正式入口继续使用 Loader + Core + Platform + Features 四文件结构，纯本地单文件版同步生成。
 
 ## 1.6.6 — 书签话题标题与操作按钮修复
 
