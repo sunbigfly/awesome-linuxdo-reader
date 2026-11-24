@@ -1597,25 +1597,54 @@
 
 @media (hover: none), (pointer: coarse) {
   .ldp-hidden-reply-avatar {
+    --ldp-reply-avatar-visual-size: 28px;
+    /* 点按区域保留 44px，外圈和图片单独缩小，避免分隔条头像抢占正文。 */
     width: 44px;
     height: 44px;
-    padding: 5px;
+    padding: 0;
+    border-width: 0;
+    background: transparent;
   }
 
-  .ldp-hidden-reply-avatar img {
-    width: 32px;
-    height: 32px;
+  .ldp-hidden-reply-avatar::before {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    inline-size: var(--ldp-reply-avatar-visual-size);
+    block-size: var(--ldp-reply-avatar-visual-size);
+    margin: auto;
+    border: 1px solid;
+    border-color: inherit;
+    border-radius: inherit;
+    content: "";
+    pointer-events: none;
   }
 
   .ldp-hidden-reply-avatar[data-read-state="read"] {
+    --ldp-reply-avatar-visual-size: 24px;
     width: 44px;
     height: 44px;
-    padding: 9px;
   }
 
-  .ldp-hidden-reply-avatar[data-read-state="read"] img {
-    width: 24px;
-    height: 24px;
+  .ldp-hidden-reply-avatar:focus-visible {
+    outline: 0;
+  }
+
+  .ldp-hidden-reply-avatar:focus-visible::before {
+    outline: 1px solid var(--ldp-ink);
+    outline-offset: 1px;
+  }
+
+  .ldp-hidden-reply-avatar .ldp-reply-avatar-read-mark {
+    top: calc((44px - var(--ldp-reply-avatar-visual-size)) / 2 - 2px);
+    right: calc((44px - var(--ldp-reply-avatar-visual-size)) / 2 - 2px);
+    width: 9px;
+    height: 9px;
+  }
+
+  .ldp-hidden-reply-avatar .ldp-reply-avatar-read-mark .ldp-icon {
+    width: 6px;
+    height: 6px;
   }
 
   .ldp-hidden-reply-more,
