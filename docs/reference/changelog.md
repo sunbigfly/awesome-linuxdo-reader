@@ -4,9 +4,9 @@ description: 记录文档对应的当前源码版本和用户可见能力基线�
 feature_ids: ["REF-002"]
 source_anchors: ["lite/userscript.meta.txt"]
 since: 0.1.2
-version: 1.6.7
+version: 1.6.8
 status: current
-last_verified: 2026-10-12
+last_verified: 2026-11-24
 screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ---
 
@@ -15,6 +15,16 @@ screenshots: ["/screenshots/guide-14-about-v1.5.0.png"]
 ![关于面板中的当前脚本版本和项目版本信息](/screenshots/guide-14-about-v1.5.0.png)
 
 <p class="image-caption">更新记录以 userscript 元数据版本为事实源；关于面板用于核对当前页面实际运行的版本。</p>
+
+## 1.6.8 — 手机隐藏头像尺寸优化
+
+发布日期：2026-11-24。
+
+- 手机端隐藏头像图片由 32px 缩为 22px，外圈由 44px 缩为 28px；已读头像使用 18px 图片和 24px 外圈。
+- 已读角标贴近缩小后的外圈，键盘焦点提示也跟随外圈；触屏点按区域保持 44px。
+- 隐藏楼层、新消息提示与“+N”列表复用同一套头像样式。
+- 源码与四文件 runtime 各 237 个契约测试、310 模块一致性门禁及发布字节核验通过；本次未补做手机或浏览器界面验收。
+- GitHub 与 Greasy Fork `1.6.8` 代码已同步；更新后请完整刷新已打开的 Discourse 页面。
 
 ## 1.6.7 — 讨论上下文、阅读设置与站点授权
 
